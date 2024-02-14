@@ -15,11 +15,11 @@ CUDAFLAGS = -arch=sm_70
 all: main
 
 main: simp_simulation.cu
-	$(CCC) $(CFLAGS) $(CUDAFLAGS) -o simp_simulation simp_simulation.cu
+	$(CCC) $(CFLAGS) $(CUDAFLAGS) -o build simp_simulation.cu
 
 # Clean
 clean:
-	rm -f simp_simulation
+	rm -f build
 
-remake: clean simp_simulation
+remake: clean build
 

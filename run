@@ -1,1 +1,1 @@
-./out/main $1
+./out/main $1 $2 1

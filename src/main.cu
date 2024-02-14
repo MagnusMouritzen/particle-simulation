@@ -1,17 +1,24 @@
 #include <cuda_runtime.h>
 #include <stdio.h>
+#include <boost/lexical_cast.hpp>
 #include "simp_simulation.h"
 #include "global_gravity_simulation.h"
 
 int main(int argc, char **argv) {
 
-    if (argc != 2) {
+    if (argc != 4) {
+        printf("Wrong number of arguments. First is program to run, second is number of particles, third is verbose or not.");
         return 0;
     }
+    int n = boost::lexical_cast<int>(argv[2]);
+    bool verbose = boost::lexical_cast<int>(argv[3]);
     if (!strcmp(argv[1], "0")) {
-        simpSimulationRun(1000);
+        simpSimulationRun(n);
     }
     else if (!strcmp(argv[1], "1")) {
-        globalGravityRun(1000);
+        globalGravityRun(n, 101, false, verbose);
+    }
+    else if (!strcmp(argv[1], "2")) {
+        globalGravityRun(n, 101, true, verbose);
     }
 }

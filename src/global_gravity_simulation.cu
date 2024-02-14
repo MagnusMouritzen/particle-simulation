@@ -12,7 +12,7 @@ struct Electron {
 };
 
 __global__ static void updateBranch(Electron* electrons, float deltaTime) {
-    int i = threadIdx.x;
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
     electrons[i].velocity.y -= 9.82 * deltaTime;
     electrons[i].position.y += electrons[i].velocity.y * deltaTime;
     if (electrons[i].position.y <= 0){
@@ -22,7 +22,7 @@ __global__ static void updateBranch(Electron* electrons, float deltaTime) {
 }
 
 __global__ static void updateMath(Electron* electrons, float deltaTime) {
-    int i = threadIdx.x;
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
     electrons[i].velocity.y -= 9.82 * deltaTime;
     electrons[i].position.y += electrons[i].velocity.y * deltaTime;
     int posSign = (electrons[0].position.y > 0.0) * 2 - 1;  // Does this branch?
@@ -30,7 +30,7 @@ __global__ static void updateMath(Electron* electrons, float deltaTime) {
     electrons[i].velocity.y *= posSign;
 }
 
-void globalGravityRun(int N) {
+void globalGravityRun(int N, int t, bool branch, bool verbose) {
 
     Electron* electrons_host = (Electron *)malloc(N * sizeof(Electron));
     for(int i=0; i<N; i++) {
@@ -43,15 +43,26 @@ void globalGravityRun(int N) {
 
     cudaMemcpy(electrons, electrons_host, N * sizeof(Electron), cudaMemcpyHostToDevice);
 
-    printf("Time %d, position %.6f, velocity %.6f\n", 0, electrons_host[0].position.y, electrons_host[0].velocity.y);
-    for (int i = 1; i < 101; i++){
-        updateBranch<<<1, N>>>(electrons, 0.1);
+    int block_size = 256;
+    int num_blocks = (N + block_size - 1) / block_size;
 
-        if (i % 5 == 0){
+    if (verbose) printf("Time %d, position %.6f, velocity %.6f\n", 0, electrons_host[0].position.y, electrons_host[0].velocity.y);
+
+    for (int i = 1; i < 101; i++){
+        if (branch){
+            updateBranch<<<num_blocks, block_size>>>(electrons, 0.1);
+        }
+        else {
+            updateMath<<<num_blocks, block_size>>>(electrons, 0.1);
+        }
+
+        if (verbose && i % 5 == 0){
             cudaMemcpy(electrons_host, electrons, N * sizeof(Electron), cudaMemcpyDeviceToHost);
             printf("Time %d, position %.6f, velocity %.6f\n", i, electrons_host[0].position.y, electrons_host[0].velocity.y);
         }
     }
+    cudaMemcpy(electrons_host, electrons, N * sizeof(Electron), cudaMemcpyDeviceToHost);
+    if (verbose) printf("Time %d, position %.6f, velocity %.6f\n", t-1, electrons_host[0].position.y, electrons_host[0].velocity.y);
 
     
 

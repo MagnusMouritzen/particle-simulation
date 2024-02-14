@@ -11,7 +11,7 @@ struct Electron {
         float3 velocity;
 };
 
-__global__ static void update(Electron* electrons, float deltaTime) {
+__global__ static void updateBranch(Electron* electrons, float deltaTime) {
     int i = threadIdx.x;
     electrons[i].velocity.y -= 9.82 * deltaTime;
     electrons[i].position.y += electrons[i].velocity.y * deltaTime;
@@ -19,6 +19,15 @@ __global__ static void update(Electron* electrons, float deltaTime) {
         electrons[i].position.y = -electrons[i].position.y;
         electrons[i].velocity.y = -electrons[i].velocity.y;
     }
+}
+
+__global__ static void updateMath(Electron* electrons, float deltaTime) {
+    int i = threadIdx.x;
+    electrons[i].velocity.y -= 9.82 * deltaTime;
+    electrons[i].position.y += electrons[i].velocity.y * deltaTime;
+    int posSign = (electrons[0].position.y > 0.0) * 2 - 1;  // Does this branch?
+    electrons[i].position.y *= posSign;
+    electrons[i].velocity.y *= posSign;
 }
 
 void globalGravityRun(int N) {
@@ -36,7 +45,7 @@ void globalGravityRun(int N) {
 
     printf("Time %d, position %.6f, velocity %.6f\n", 0, electrons_host[0].position.y, electrons_host[0].velocity.y);
     for (int i = 1; i < 101; i++){
-        update<<<1, N>>>(electrons, 0.1);
+        updateBranch<<<1, N>>>(electrons, 0.1);
 
         if (i % 5 == 0){
             cudaMemcpy(electrons_host, electrons, N * sizeof(Electron), cudaMemcpyDeviceToHost);

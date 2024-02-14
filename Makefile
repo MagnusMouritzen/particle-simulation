@@ -15,7 +15,7 @@ CUDAFLAGS = -arch=sm_70
 all: main
 
 main: main.cu
-	$(CCC) $(CFLAGS) $(CUDAFLAGS) -o build utility.cu global_gravity_simulation.cu simp_simulation.cu main.cu
+	$(CCC) $(CFLAGS) $(CUDAFLAGS) -o build *.cu
 
 # Clean
 clean:

@@ -1,7 +1,8 @@
 #include <cuda_runtime.h>
 #include <stdio.h>
-#include "simp_simulation.h"
 #include "utility.h"
+#include "global_gravity_simulation.h"
+
 
 struct Electron {
     public:
@@ -12,10 +13,10 @@ struct Electron {
 
 __global__ static void update(Electron* electrons) {
     int i = threadIdx.x;
-    electrons[i].position.y += electrons[i].velocity.y;
+
 }
 
-void simpSimulationRun(int N) {
+void globalGravityRun(int N) {
 
     Electron* electrons_host = (Electron *)malloc(N * sizeof(Electron));
     for(int i=0; i<N; i++) {

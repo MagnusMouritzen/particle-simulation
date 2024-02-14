@@ -14,12 +14,13 @@ CUDAFLAGS = -arch=sm_70
 
 all: main
 
-main: main.cu
-	$(CCC) $(CFLAGS) $(CUDAFLAGS) -o build *.cu
+main: src/main.cu
+	$ mkdir -p out
+	$(CCC) $(CFLAGS) $(CUDAFLAGS) -o out/main src/*.cu
 
 # Clean
 clean:
-	rm -f build
+	rm -f out/main
 
-remake: clean build
+remake: clean out/main
 

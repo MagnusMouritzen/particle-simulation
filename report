@@ -1,0 +1,1 @@
+nsys profile --force-overwrite true -o out/report.nsys-rep ./out/main $1

@@ -6,7 +6,7 @@ CCC = nvcc
 CXX = nvc++
 
 # Flags
-CFLAGS = -O3 -std=c++11
+CFLAGS = -O3 -std=c++11 -lpng
 # CUDA flags
 CUDAFLAGS = -arch=sm_70
 # sm_70 is the architecture of the GPU, it can be changed to match the GPU you are using.

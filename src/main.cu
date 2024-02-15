@@ -4,8 +4,8 @@
 #include "simp_simulation.h"
 #include "global_gravity_simulation.h"
 
-int main(int argc, char **argv) {
 
+int main(int argc, char **argv) {
     if (argc != 4) {
         printf("Wrong number of arguments. First is program to run, second is number of particles, third is verbose or not.");
         return 0;

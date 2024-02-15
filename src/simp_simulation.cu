@@ -3,12 +3,6 @@
 #include "simp_simulation.h"
 #include "utility.h"
 
-struct Electron {
-    public:
-        float3 position;
-        float weight;
-        float3 velocity;
-};
 
 __global__ static void update(Electron* electrons) {
     int i = threadIdx.x;

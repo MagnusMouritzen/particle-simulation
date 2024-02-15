@@ -4,12 +4,6 @@
 #include "global_gravity_simulation.h"
 
 
-struct Electron {
-    public:
-        float3 position;
-        float weight;
-        float3 velocity;
-};
 
 __global__ static void updateBranch(Electron* electrons, float deltaTime) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -31,10 +25,10 @@ __global__ static void updateMath(Electron* electrons, float deltaTime) {
 }
 
 void globalGravityRun(int N, int t, bool branch, bool verbose) {
-
+    
     Electron* electrons_host = (Electron *)malloc(N * sizeof(Electron));
     for(int i=0; i<N; i++) {
-        electrons_host[i].position = make_float3(randomFloat(0,5), randomFloat(10,50), 1.0);
+        electrons_host[i].position = make_float3(randomFloat(0,50), randomFloat(10,50), 1.0);
         electrons_host[i].weight = 1.0;
     }
 
@@ -59,6 +53,7 @@ void globalGravityRun(int N, int t, bool branch, bool verbose) {
         if (verbose && i % 5 == 0){
             cudaMemcpy(electrons_host, electrons, N * sizeof(Electron), cudaMemcpyDeviceToHost);
             printf("Time %d, position %.6f, velocity %.6f\n", i, electrons_host[0].position.y, electrons_host[0].velocity.y);
+            // image(N, electrons_host, i); // visualize a snapshot of the current positions of the particles     
         }
     }
     cudaMemcpy(electrons_host, electrons, N * sizeof(Electron), cudaMemcpyDeviceToHost);

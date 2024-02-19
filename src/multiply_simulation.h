@@ -1,0 +1,1 @@
+void multiplyRun(int init_n, int capacity, int max_t, int mode, bool verbose);

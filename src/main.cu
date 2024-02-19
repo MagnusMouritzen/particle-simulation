@@ -3,6 +3,7 @@
 #include <boost/lexical_cast.hpp>
 #include "simp_simulation.h"
 #include "global_gravity_simulation.h"
+#include "multiply_simulation.h"
 
 
 int main(int argc, char **argv) {
@@ -20,5 +21,8 @@ int main(int argc, char **argv) {
     }
     else if (!strcmp(argv[1], "2")) {
         globalGravityRun(n, 101, true, verbose);
+    }
+    else if (!strcmp(argv[1], "3")){
+        multiplyRun(1, 10, 100, 0, verbose);
     }
 }

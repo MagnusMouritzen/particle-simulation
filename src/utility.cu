@@ -87,7 +87,7 @@ void image(int N, Electron* electrons, int iteration) {
         }
     }
     char filename[30];
-    sprintf(filename, "./out/test_%0d.png", iteration);
+    sprintf(filename, "./out/test_%03d.png", iteration);
     save_png(image, width, height, filename);
 
     // Free byte buffer

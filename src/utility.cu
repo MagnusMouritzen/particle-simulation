@@ -86,8 +86,8 @@ void image(int N, Electron* electrons, int iteration) {
             image[((int)(50 - electrons[i].position.y) * width + (int)(electrons[i].position.x)) * 3 + 2] = 0;
         }
     }
-    char filename[11];
-    sprintf(filename, "test_%0d.png", iteration);
+    char filename[30];
+    sprintf(filename, "./out/test_%0d.png", iteration);
     save_png(image, width, height, filename);
 
     // Free byte buffer

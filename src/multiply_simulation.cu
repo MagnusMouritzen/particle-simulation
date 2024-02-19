@@ -19,11 +19,13 @@ __global__ static void updateNormal(Electron* electrons, float deltaTime, int* n
         }
 
         int new_i = atomicAdd(n, 1);
-        printf("Particle %d spawns particle %d\n", i, new_i);
-        electrons[new_i].position.y = electrons[i].position.y;
-        electrons[new_i].velocity.y = electrons[i].velocity.y;
-        electrons[new_i].velocity.x = -electrons[i].velocity.x;
-        electrons[new_i].position.x = electrons[i].position.x + electrons[new_i].velocity.x * deltaTime;
+        if (new_i < capacity){
+            printf("Particle %d spawns particle %d\n", i, new_i);
+            electrons[new_i].position.y = electrons[i].position.y;
+            electrons[new_i].velocity.y = electrons[i].velocity.y;
+            electrons[new_i].velocity.x = -electrons[i].velocity.x;
+            electrons[new_i].position.x = electrons[i].position.x + electrons[new_i].velocity.x * deltaTime;
+        }
     }
     electrons[i].position.x += electrons[i].velocity.x * deltaTime;
 }
@@ -75,14 +77,14 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, bool verbose) {
                 if (verbose && t % 1 == 0){
                     cudaMemcpy(electrons_host, electrons, *n_host * sizeof(Electron), cudaMemcpyDeviceToHost);
                     printf("Time %d, amount %d\n", t, *n_host);
-                    for(int i = 0; i < *n_host; i++){
+                    for(int i = 0; i < min(*n_host, capacity); i++){
+                        if (i >= capacity) break;
                         printf("%d: (%.6f, %.6f) (%.6f, %.6f)\n", i, electrons_host[i].position.x, electrons_host[i].position.y, electrons_host[i].velocity.x, electrons_host[i].velocity.y);
                     }
-                    image(*n_host, electrons_host, t); // visualize a snapshot of the current positions of the particles     
+                    image(min(*n_host, capacity), electrons_host, t); // visualize a snapshot of the current positions of the particles     
                     printf("\n");
                 }
-
-                if (*n_host > capacity) break;
+                if (*n_host >= capacity) break;
             }
             break;
         case 1:

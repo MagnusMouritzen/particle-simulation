@@ -1,8 +1,12 @@
+#include <limits>
+using namespace std;
+
 struct Electron {
     public:
         float3 position;
         float weight;
         float3 velocity;
+        int timestamp = numeric_limits<int>::max();
 };
 
 float randomFloat();

@@ -3,42 +3,7 @@
 #include "utility.h"
 #include "multiply_simulation.h"
 
-
-
-__global__ static void updateNormal(Electron* electrons, float deltaTime, int* n, int start_n, int capacity) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    
-    // The thread index has passed the number of electrons. Thread returns if all electron are being handled
-    if (i >= start_n) return;
-
-    electrons[i].velocity.y -= 9.82 * deltaTime;
-    electrons[i].position.y += electrons[i].velocity.y * deltaTime;
-
-    if (electrons[i].position.y <= 0){
-        electrons[i].position.y = -electrons[i].position.y;
-        electrons[i].velocity.y = -electrons[i].velocity.y;
-        if (electrons[i].velocity.x == 0){
-            electrons[i].velocity.x = 1;
-        }
-
-        int new_i = atomicAdd(n, 1);
-        if (new_i < capacity){
-            printf("Particle %d spawns particle %d\n", i, new_i);
-            electrons[new_i].position.y = electrons[i].position.y;
-            electrons[new_i].velocity.y = electrons[i].velocity.y;
-            electrons[new_i].velocity.x = -electrons[i].velocity.x;
-            electrons[new_i].position.x = electrons[i].position.x + electrons[new_i].velocity.x * deltaTime;
-        }
-    }
-    electrons[i].position.x += electrons[i].velocity.x * deltaTime;
-}
-
-__global__ static void updateHuge(Electron* electrons, float deltaTime, int* n, int capacity, int t) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    
-    // The thread index has passed the number of electrons. Thread returns if all electron are being handled
-    if (i >= *n || electrons[i].timestamp == t || electrons[i].timestamp == 0) return;
-
+__device__ static void simulate(Electron* electrons, float deltaTime, int* n, int capacity, int i, int t){
     electrons[i].velocity.y -= 9.82 * deltaTime;
     electrons[i].position.y += electrons[i].velocity.y * deltaTime;
 
@@ -62,6 +27,24 @@ __global__ static void updateHuge(Electron* electrons, float deltaTime, int* n, 
     electrons[i].position.x += electrons[i].velocity.x * deltaTime;
 }
 
+__global__ static void updateNormal(Electron* electrons, float deltaTime, int* n, int start_n, int capacity) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    // The thread index has passed the number of electrons. Thread returns if all electron are being handled
+    if (i >= start_n) return;
+
+    simulate(electrons, deltaTime, n, capacity, i, 0);
+}
+
+__global__ static void updateHuge(Electron* electrons, float deltaTime, int* n, int capacity, int t) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    // The thread index has passed the number of electrons. Thread returns if all electron are being handled
+    if (i >= *n || electrons[i].timestamp == t || electrons[i].timestamp == 0) return;
+
+    simulate(electrons, deltaTime, n, capacity, i, t);
+}
+
 __global__ static void updateStatic(Electron* electrons, float deltaTime, int* n, int capacity, int t) {
     int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
     int num_blocks = gridDim.x;
@@ -71,27 +54,7 @@ __global__ static void updateStatic(Electron* electrons, float deltaTime, int* n
         // The thread index has passed the number of electrons. Thread returns if all electron are being handled
         if (electrons[i].timestamp == t || electrons[i].timestamp == 0) return;
 
-        electrons[i].velocity.y -= 9.82 * deltaTime;
-        electrons[i].position.y += electrons[i].velocity.y * deltaTime;
-
-        if (electrons[i].position.y <= 0){
-            electrons[i].position.y = -electrons[i].position.y;
-            electrons[i].velocity.y = -electrons[i].velocity.y;
-            if (electrons[i].velocity.x == 0){
-                electrons[i].velocity.x = 1;
-            }
-
-            int new_i = atomicAdd(n, 1);
-            if (new_i < capacity){
-                printf("Particle %d spawns particle %d\n", i, new_i);
-                electrons[new_i].position.y = electrons[i].position.y;
-                electrons[new_i].velocity.y = electrons[i].velocity.y;
-                electrons[new_i].velocity.x = -electrons[i].velocity.x;
-                electrons[new_i].position.x = electrons[i].position.x + electrons[new_i].velocity.x * deltaTime;
-                electrons[new_i].timestamp = t;
-            }
-        }
-        electrons[i].position.x += electrons[i].velocity.x * deltaTime;
+        simulate(electrons, deltaTime, n, capacity, i, t);
     }
 
 }

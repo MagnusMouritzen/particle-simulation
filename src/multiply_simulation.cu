@@ -16,7 +16,7 @@ __device__ static void simulate(Electron* electrons, float deltaTime, int* n, in
 
         int new_i = atomicAdd(n, 1);
         if (new_i < capacity){
-            printf("Particle %d spawns particle %d\n", i, new_i);
+            // printf("Particle %d spawns particle %d\n", i, new_i);
             electrons[new_i].position.y = electrons[i].position.y;
             electrons[new_i].velocity.y = electrons[i].velocity.y;
             electrons[new_i].velocity.x = -electrons[i].velocity.x;
@@ -64,6 +64,10 @@ __global__ static void updateDynamic(Electron* electrons, float deltaTime) {
 
 void multiplyRun(int init_n, int capacity, int max_t, int mode, bool verbose) {
     
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    
     Electron* electrons_host = (Electron *)calloc(capacity, sizeof(Electron));
     for(int i=0; i<init_n; i++) {
         electrons_host[i].position = make_float3(250, 250, 1.0);
@@ -89,8 +93,10 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, bool verbose) {
 
     switch(mode){
         case 0: { // Normal
+            cudaEventRecord(start);
             for (int t = 1; t < max_t; t++){
                 int num_blocks = (*n_host + block_size - 1) / block_size;
+                
                 updateNormal<<<num_blocks, block_size>>>(electrons, 0.1, n, *n_host, capacity);
                 
                 cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
@@ -107,10 +113,12 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, bool verbose) {
                 }
                 if (*n_host >= capacity) break;
             }
+            cudaEventRecord(stop);
             break;
         }
         case 1: { // Huge
             int num_blocks = (capacity + block_size - 1) / block_size;
+            cudaEventRecord(start);
             for (int t = 1; t < max_t; t++) {
 
                 updateHuge<<<num_blocks, block_size>>>(electrons, 0.1, n, capacity, t);
@@ -131,12 +139,14 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, bool verbose) {
                     printf("\n");
                 }
             }
+            cudaEventRecord(stop);
             break;
         }
         case 2: { // Static
             int num_blocks;            
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
             printf("Number of blocks: %d \n",num_blocks);
+            cudaEventRecord(start);
             for (int t = 1; t < max_t; t++) {
 
                 updateStatic<<<num_blocks, block_size>>>(electrons, 0.1, n, capacity, t);
@@ -158,6 +168,7 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, bool verbose) {
                     printf("\n");
                 }
             }
+            cudaEventRecord(stop);
             break;
         }
         case 3: { // Dynamic
@@ -168,4 +179,9 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, bool verbose) {
     }
 
     cudaMemcpy(electrons_host, electrons, *n_host * sizeof(Electron), cudaMemcpyDeviceToHost);   
+    cudaEventSynchronize(stop); //skal det være her?
+
+    float runtime_ms = 0;
+    cudaEventElapsedTime(&runtime_ms, start, stop);
+    printf("GPU time of program: %f ms\n", runtime_ms);
 }

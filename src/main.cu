@@ -25,10 +25,10 @@ int main(int argc, char **argv) {
         globalGravityRun(n, 101, true, verbose);
     }
     else if (!strcmp(argv[1], "3")){ //Normal
-        multiplyRun(1, 10, 100, 0, verbose);
+        multiplyRun(1, 1000, 10000, 0, verbose);
     }
     else if (!strcmp(argv[1], "4")){ //Huge
-        multiplyRun(1, 10, 100, 1, verbose);
+        multiplyRun(1, 1000, 10000, 1, verbose);
     }
     else if (!strcmp(argv[1], "5")){ //Static
         multiplyRun(1, 1000, 10000, 2, verbose);

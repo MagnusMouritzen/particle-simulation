@@ -58,13 +58,25 @@ void save_png(unsigned char* image, int width, int height, const char* filename)
     printf("Saved image to %s\n", filename);
 }
 
+void draw_particle (unsigned char* image, float x, float y, int height, int width) { 
+    for (int i = -5; i <= 5; i++) {
+        for (int j = -5; j <= 5; j++) { 
+            
+            if (y+j > height || y+j < 0 || x+i > width || x+i < 0) continue;
+
+            image[((int)(height - (y+j)) * width + (int)(x+i)) * 3 + 0] = 0;
+            image[((int)(height - (y+j)) * width + (int)(x+i)) * 3 + 1] = 0;
+            image[((int)(height - (y+j)) * width + (int)(x+i)) * 3 + 2] = 0;
+        }
+    }
+}
+
 void image(int N, Electron* electrons, int iteration) {
-    int width = 50;
-    int height = 50;
+    int width = 500;
+    int height = 500;
 
     unsigned char *image = (unsigned char*)malloc(width * height * 3);
 
-    // Create a checkboard pattern with 16x16 squares
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
             image[(y * width + x) * 3 + 0] = 255;
@@ -74,16 +86,7 @@ void image(int N, Electron* electrons, int iteration) {
     }
 
     for (int i = 0; i < N; i++) {
-        if (i == 0) {
-            image[((int)(50 - electrons[i].position.y) * width + (int)(electrons[i].position.x)) * 3 + 0] = 255;
-            image[((int)(50 - electrons[i].position.y) * width + (int)(electrons[i].position.x)) * 3 + 1] = 0;
-            image[((int)(50 - electrons[i].position.y) * width + (int)(electrons[i].position.x)) * 3 + 2] = 0;
-        }
-        else {
-            image[((int)(50 - electrons[i].position.y) * width + (int)(electrons[i].position.x)) * 3 + 0] = 0;
-            image[((int)(50 - electrons[i].position.y) * width + (int)(electrons[i].position.x)) * 3 + 1] = 0;
-            image[((int)(50 - electrons[i].position.y) * width + (int)(electrons[i].position.x)) * 3 + 2] = 0;
-        }
+        draw_particle (image, electrons[i].position.x, electrons[i].position.y, height, width);
     }
     char filename[30];
     sprintf(filename, "./out/test_%03d.png", iteration);

@@ -1,5 +1,4 @@
 #include <png.h>
-using namespace std;
 #include "utility.h"
 
 float randomFloat() {
@@ -93,5 +92,16 @@ void image(int N, Electron* electrons, int iteration) {
     // Free byte buffer
     free(image);
 
+}
+
+
+// Timing
+chrono::time_point<high_resolution_clock> start_cpu_timer(){
+    return high_resolution_clock::now();
+}
+
+double end_cpu_timer(chrono::time_point<high_resolution_clock> start){
+    auto end = high_resolution_clock::now();
+    return duration_cast<nanoseconds>(end - start).count() / 1000000.0;
 }
 

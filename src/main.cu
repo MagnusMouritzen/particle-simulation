@@ -4,6 +4,7 @@
 #include "simp_simulation.h"
 #include "global_gravity_simulation.h"
 #include "multiply_simulation.h"
+#include "utility.h"
 
 
 int main(int argc, char **argv) {
@@ -13,6 +14,7 @@ int main(int argc, char **argv) {
     }
     int n = boost::lexical_cast<int>(argv[2]);
     bool verbose = boost::lexical_cast<int>(argv[3]);
+    auto start = start_cpu_timer();
     if (!strcmp(argv[1], "0")) {
         simpSimulationRun(n);
     }
@@ -31,4 +33,6 @@ int main(int argc, char **argv) {
     else if (!strcmp(argv[1], "5")){ //Static
         multiplyRun(1, 1000, 10000, 2, verbose);
     }
+    double time = end_cpu_timer(start);
+    printf("CPU time of program: %f ms\n", time);
 }

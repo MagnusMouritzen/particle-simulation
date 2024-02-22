@@ -103,7 +103,7 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, bool verbose) {
     
     Electron* electrons_host = (Electron *)calloc(capacity, sizeof(Electron));
     for(int i=0; i<init_n; i++) {
-        electrons_host[i].position = make_float3(25, 5, 1.0);
+        electrons_host[i].position = make_float3(250, 250, 1.0);
         electrons_host[i].weight = 1.0;
         electrons_host[i].timestamp = -1;
     }
@@ -160,6 +160,7 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, bool verbose) {
                     printf("Time %d, amount %d\n", t, *n_host);
                     for(int i = 0; i < capacity; i++) {
                         if (electrons_host[i].timestamp == 0) break;
+                        count++;
 
                         printf("%d: (%.6f, %.6f) (%.6f, %.6f)\n", i, electrons_host[i].position.x, electrons_host[i].position.y, electrons_host[i].velocity.x, electrons_host[i].velocity.y);
                     }
@@ -190,7 +191,7 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, bool verbose) {
                     }
                     printf("Time %d, amount %d\n", t, count);
 
-                    // image(min(count, capacity), electrons_host, t); // visualize a snapshot of the current positions of the particles     
+                    image(min(count, capacity), electrons_host, t); // visualize a snapshot of the current positions of the particles     
                     printf("\n");
                 }
             }

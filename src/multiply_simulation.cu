@@ -14,20 +14,20 @@ __device__ static void simulate(Electron* electrons, float deltaTime, int* n, in
         int new_i = atomicAdd(n, 1);
         if (new_i < capacity){
             if (electrons[i].velocity.x >= 0){
-                electrons[i].velocity.x += 1;
+                electrons[i].velocity.x += 10;
             }
             else{
-                electrons[i].velocity.x -= 1;
+                electrons[i].velocity.x -= 10;
             }
 
-            // printf("Particle %d spawns particle %d\n", i, new_i);
+            printf("Particle %d spawns particle %d\n", i, new_i);
             electrons[new_i].position.y = electrons[i].position.y;
             electrons[new_i].velocity.y = electrons[i].velocity.y;
             if (electrons[i].velocity.x >= 0){
-                electrons[new_i].velocity.x = electrons[i].velocity.x - 2;
+                electrons[new_i].velocity.x = electrons[i].velocity.x - 20;
             }
             else{
-                electrons[new_i].velocity.x = electrons[i].velocity.x + 2;
+                electrons[new_i].velocity.x = electrons[i].velocity.x + 20;
             }
             electrons[new_i].position.x = electrons[i].position.x + electrons[new_i].velocity.x * deltaTime;
             electrons[new_i].timestamp = t;
@@ -113,7 +113,7 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, int
         electrons_host[i].timestamp = -1;
     }
 
-    float delta_time = 1;
+    float delta_time = 0.1;
 
     Electron* electrons;
     cudaMalloc(&electrons, capacity * sizeof(Electron));
@@ -134,7 +134,7 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, int
             cudaEventRecord(start);
             for (int t = 1; t < max_t; t++){
                 int num_blocks = (*n_host + block_size - 1) / block_size;
-                updateNormal<<<num_blocks, block_size>>>(electrons, delta_time, n, *n_host, capacity);
+                updateNormal<<<num_blocks, block_size>>>(electrons, delta_time, n, min(*n_host, capacity), capacity);
                 cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
 
                 log(verbose, t, electrons_host, electrons, n_host, n, capacity);

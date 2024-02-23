@@ -12,4 +12,4 @@ for i in sorted(imgs):
 frames[0].save('out/result.gif', format='GIF',
                append_images=frames[1:],
                save_all=True,
-               duration=300, loop=0)
+               duration=30, loop=0)

@@ -89,7 +89,7 @@ void image(int N, Electron* electrons, int iteration) {
         draw_particle (image, electrons[i].position.x, electrons[i].position.y, height, width);
     }
     char filename[30];
-    sprintf(filename, "./out/test_%03d.png", iteration);
+    sprintf(filename, "./out/test_%04d.png", iteration);
     save_png(image, width, height, filename);
 
     // Free byte buffer

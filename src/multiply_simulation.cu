@@ -56,10 +56,20 @@ __global__ static void updateStatic(Electron* electrons, float deltaTime, int* n
 
         simulate(electrons, deltaTime, n, capacity, i, t);
     }
-
 }
 
-__global__ static void updateDynamic(Electron* electrons, float deltaTime) {
+
+
+static void log(bool verbose, int t, Electron* electrons_host, Electron* electrons, int* n_host, int* n, int capacity){
+    if (!verbose || t % 10 != 0) return;
+    cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
+    cudaMemcpy(electrons_host, electrons, *n_host * sizeof(Electron), cudaMemcpyDeviceToHost);
+    printf("Time %d, amount %d\n", t, *n_host);
+    for(int i = 0; i < min(*n_host, capacity); i++){
+        printf("%d: (%.6f, %.6f) (%.6f, %.6f)\n", i, electrons_host[i].position.x, electrons_host[i].position.y, electrons_host[i].velocity.x, electrons_host[i].velocity.y);
+    }
+    image(min(*n_host, capacity), electrons_host, t); // visualize a snapshot of the current positions of the particles     
+    printf("\n");
 }
 
 void multiplyRun(int init_n, int capacity, int max_t, int mode, bool verbose) {
@@ -93,95 +103,56 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, bool verbose) {
 
     switch(mode){
         case 0: { // Normal
+            printf("Multiply normal\n");
             cudaEventRecord(start);
             for (int t = 1; t < max_t; t++){
                 int num_blocks = (*n_host + block_size - 1) / block_size;
-                
                 updateNormal<<<num_blocks, block_size>>>(electrons, 0.1, n, *n_host, capacity);
-                
                 cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
 
-                if (verbose && t % 1 == 0){
-                    cudaMemcpy(electrons_host, electrons, *n_host * sizeof(Electron), cudaMemcpyDeviceToHost);
-                    printf("Time %d, amount %d\n", t, *n_host);
-                    for(int i = 0; i < min(*n_host, capacity); i++){
-                        if (i >= capacity) break;
-                        printf("%d: (%.6f, %.6f) (%.6f, %.6f)\n", i, electrons_host[i].position.x, electrons_host[i].position.y, electrons_host[i].velocity.x, electrons_host[i].velocity.y);
-                    }
-                    image(min(*n_host, capacity), electrons_host, t); // visualize a snapshot of the current positions of the particles     
-                    printf("\n");
-                }
-                if (*n_host >= capacity) break;
+                log(verbose, t, electrons_host, electrons, n_host, n, capacity);
             }
             cudaEventRecord(stop);
             break;
         }
         case 1: { // Huge
+            printf("Multiply huge\n");
             int num_blocks = (capacity + block_size - 1) / block_size;
             cudaEventRecord(start);
             for (int t = 1; t < max_t; t++) {
-
                 updateHuge<<<num_blocks, block_size>>>(electrons, 0.1, n, capacity, t);
-
-                if (verbose && t % 1 == 0){
-                    cudaMemcpy(electrons_host, electrons, capacity * sizeof(Electron), cudaMemcpyDeviceToHost);
-
-                    int count = 0;
-
-                    printf("Time %d, amount %d\n", t, *n_host);
-                    for(int i = 0; i < capacity; i++) {
-                        if (electrons_host[i].timestamp == 0) break;
-                        count++;
-
-                        printf("%d: (%.6f, %.6f) (%.6f, %.6f)\n", i, electrons_host[i].position.x, electrons_host[i].position.y, electrons_host[i].velocity.x, electrons_host[i].velocity.y);
-                    }
-                    image(min(count, capacity), electrons_host, t); // visualize a snapshot of the current positions of the particles     
-                    printf("\n");
-                }
+                log(verbose, t, electrons_host, electrons, n_host, n, capacity);
             }
             cudaEventRecord(stop);
             break;
         }
         case 2: { // Static
+            printf("Multiply static\n");
             int num_blocks;            
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
             printf("Number of blocks: %d \n",num_blocks);
             cudaEventRecord(start);
             for (int t = 1; t < max_t; t++) {
-
                 updateStatic<<<num_blocks, block_size>>>(electrons, 0.1, n, capacity, t);
-
-                if (verbose && t % 10 == 0){
-                    cudaMemcpy(electrons_host, electrons, capacity * sizeof(Electron), cudaMemcpyDeviceToHost);
-
-                    int count = 0;
-
-                    for(int i = 0; i < capacity; i++) {
-                        if (electrons_host[i].timestamp == 0) break;
-                        count++;
-
-                        // printf("%d: (%.6f, %.6f) (%.6f, %.6f)\n", i, electrons_host[i].position.x, electrons_host[i].position.y, electrons_host[i].velocity.x, electrons_host[i].velocity.y);
-                    }
-                    printf("Time %d, amount %d\n", t, count);
-
-                    image(min(count, capacity), electrons_host, t); // visualize a snapshot of the current positions of the particles     
-                    printf("\n");
-                }
+                log(verbose, t, electrons_host, electrons, n_host, n, capacity);
             }
             cudaEventRecord(stop);
             break;
         }
         case 3: { // Dynamic
+            printf("Multiply dynamic not implemented\n");
             break;
         }
         default:
             break;
     }
 
+    cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
     cudaMemcpy(electrons_host, electrons, *n_host * sizeof(Electron), cudaMemcpyDeviceToHost);   
     cudaEventSynchronize(stop); //skal det være her?
 
     float runtime_ms = 0;
     cudaEventElapsedTime(&runtime_ms, start, stop);
+    printf("Final amount of particles: %d\n", min(*n_host, capacity));
     printf("GPU time of program: %f ms\n", runtime_ms);
 }

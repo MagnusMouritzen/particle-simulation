@@ -20,7 +20,7 @@ __device__ static void simulate(Electron* electrons, float deltaTime, int* n, in
                 electrons[i].velocity.x -= 10;
             }
 
-            printf("Particle %d spawns particle %d\n", i, new_i);
+            //printf("Particle %d spawns particle %d\n", i, new_i);
             electrons[new_i].position.y = electrons[i].position.y;
             electrons[new_i].velocity.y = electrons[i].velocity.y;
             if (electrons[i].velocity.x >= 0){

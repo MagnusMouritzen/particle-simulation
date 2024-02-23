@@ -72,8 +72,9 @@ static void log(bool verbose, int t, Electron* electrons_host, Electron* electro
     printf("\n");
 }
 
-void multiplyRun(int init_n, int capacity, int max_t, int mode, bool verbose) {
-    
+void multiplyRun(int init_n, int capacity, int max_t, int mode, bool verbose, int block_size) {
+    printf("Multiply with\ninit n: %d\ncapacity: %d\nmax t: %d\nblock size: %d\n", init_n, capacity, max_t, block_size);
+
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
@@ -89,9 +90,6 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, bool verbose) {
     cudaMalloc(&electrons, capacity * sizeof(Electron));
 
     cudaMemcpy(electrons, electrons_host, init_n * sizeof(Electron), cudaMemcpyHostToDevice);
-
-
-    int block_size = 256;
 
     int* n_host = (int*)malloc(sizeof(int));
     int* n;
@@ -126,9 +124,9 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, bool verbose) {
             cudaEventRecord(stop);
             break;
         }
-        case 2: { // Static
-            printf("Multiply static\n");
-            int num_blocks;            
+        case 2: { // Static simple
+            printf("Multiply static simple\n");
+            int num_blocks;
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
             printf("Number of blocks: %d \n",num_blocks);
             cudaEventRecord(start);
@@ -139,7 +137,32 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, bool verbose) {
             cudaEventRecord(stop);
             break;
         }
-        case 3: { // Dynamic
+        case 3: { // Static advanced
+        
+            printf("Multiply static advanced\n");
+            int numBlocksPerSm = 0;
+            // Number of threads my_kernel will be launched with
+            int numThreads = block_size;
+            cudaDeviceProp deviceProp;
+            cudaGetDeviceProperties(&deviceProp, 0);  // What number should this actually be?
+            cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksPerSm, updateStatic, numThreads, 0);
+            // launch
+            float delta_time = 0.1;
+            dim3 dimBlock(numThreads, 1, 1);
+            dim3 dimGrid(deviceProp.multiProcessorCount*numBlocksPerSm, 1, 1);
+            printf("numBlocksPerSm: %d \n",numBlocksPerSm);
+            printf("multiProcessorCount: %d \n",deviceProp.multiProcessorCount);
+
+            cudaEventRecord(start);
+            for (int t = 1; t < max_t; t++) {
+                void *kernelArgs[] = { &electrons, &delta_time, &n, &capacity, &t };
+                cudaLaunchCooperativeKernel((void*)updateStatic, dimGrid, dimBlock, kernelArgs);
+                log(verbose, t, electrons_host, electrons, n_host, n, capacity);
+            }
+            cudaEventRecord(stop);
+            break;
+        }
+        case 4: { // Dynamic
             printf("Multiply dynamic not implemented\n");
             break;
         }

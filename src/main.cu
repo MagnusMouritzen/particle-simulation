@@ -9,12 +9,13 @@
 
 int main(int argc, char **argv) {
     if (argc < 5) {
-        printf("Too few arguments.\n1 - Mode.\n2 - Verbose.\n3 - Initial particle amount.\n4 - Max iterations.\n5 - Max particles.\n");
+        printf("Too few arguments.\n1 - Mode.\n2 - Verbose.\n3 - Initial particle amount.\n4 - Max iterations.\n5 - Block size\n6 - Max particles.\n");
         return 0;
     }
     bool verbose = boost::lexical_cast<int>(argv[2]);
     int init_n = boost::lexical_cast<int>(argv[3]);
     int max_t = boost::lexical_cast<int>(argv[4]);
+    int block_size = boost::lexical_cast<int>(argv[5]);
     auto start = start_cpu_timer();
     if (!strcmp(argv[1], "0")) {
         simpSimulationRun(init_n);
@@ -26,15 +27,18 @@ int main(int argc, char **argv) {
         globalGravityRun(init_n, max_t, true, verbose);
     }
     else {
-        int max_n = boost::lexical_cast<int>(argv[5]);
+        int max_n = boost::lexical_cast<int>(argv[6]);
         if (!strcmp(argv[1], "3")){ //Normal
-            multiplyRun(init_n, max_n, max_t, 0, verbose);
+            multiplyRun(init_n, max_n, max_t, 0, verbose, block_size);
         }
         else if (!strcmp(argv[1], "4")){ //Huge
-            multiplyRun(init_n, max_n, max_t, 1, verbose);
+            multiplyRun(init_n, max_n, max_t, 1, verbose, block_size);
         }
         else if (!strcmp(argv[1], "5")){ //Static
-            multiplyRun(init_n, max_n, max_t, 2, verbose);
+            multiplyRun(init_n, max_n, max_t, 2, verbose, block_size);
+        }
+        else if (!strcmp(argv[1], "6")){ //Static advanced
+            multiplyRun(init_n, max_n, max_t, 3, verbose, block_size);
         }
     }
     double time = end_cpu_timer(start);

@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
         printf("Too few arguments.\n1 - Mode.\n2 - Verbose.\n3 - Initial particle amount.\n4 - Max iterations.\n5 - Block size\n6 - Max particles.\n");
         return 0;
     }
-    bool verbose = boost::lexical_cast<int>(argv[2]);
+    int verbose = boost::lexical_cast<int>(argv[2]);
     int init_n = boost::lexical_cast<int>(argv[3]);
     int max_t = boost::lexical_cast<int>(argv[4]);
     int block_size = boost::lexical_cast<int>(argv[5]);

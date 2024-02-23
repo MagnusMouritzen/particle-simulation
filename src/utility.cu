@@ -75,7 +75,7 @@ void image(int N, Electron* electrons, int iteration) {
     int width = 500;
     int height = 500;
 
-    unsigned char *image = (unsigned char*)malloc(width * height * 3);
+    unsigned char *image = (unsigned char*)malloc(width * height * 3 + 1);
 
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {

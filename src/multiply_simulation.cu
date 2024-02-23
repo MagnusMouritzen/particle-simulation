@@ -4,27 +4,53 @@
 #include "multiply_simulation.h"
 
 __device__ static void simulate(Electron* electrons, float deltaTime, int* n, int capacity, int i, int t){
-    electrons[i].velocity.y -= 9.82 * deltaTime;
+    electrons[i].velocity.y -= 9.82 * deltaTime * electrons[i].weight;
     electrons[i].position.y += electrons[i].velocity.y * deltaTime;
 
     if (electrons[i].position.y <= 0){
         electrons[i].position.y = -electrons[i].position.y;
         electrons[i].velocity.y = -electrons[i].velocity.y;
-        if (electrons[i].velocity.x == 0){
-            electrons[i].velocity.x = 1;
-        }
 
         int new_i = atomicAdd(n, 1);
         if (new_i < capacity){
+            if (electrons[i].velocity.x >= 0){
+                electrons[i].velocity.x += 1;
+            }
+            else{
+                electrons[i].velocity.x -= 1;
+            }
+
             // printf("Particle %d spawns particle %d\n", i, new_i);
             electrons[new_i].position.y = electrons[i].position.y;
             electrons[new_i].velocity.y = electrons[i].velocity.y;
-            electrons[new_i].velocity.x = -electrons[i].velocity.x;
+            if (electrons[i].velocity.x >= 0){
+                electrons[new_i].velocity.x = electrons[i].velocity.x - 2;
+            }
+            else{
+                electrons[new_i].velocity.x = electrons[i].velocity.x + 2;
+            }
             electrons[new_i].position.x = electrons[i].position.x + electrons[new_i].velocity.x * deltaTime;
             electrons[new_i].timestamp = t;
+            electrons[new_i].weight = electrons[i].weight;
         }
     }
+    else if (electrons[i].position.y >= 500){
+        electrons[i].position.y = 500 - (electrons[i].position.y - 500);
+        electrons[i].velocity.y = -electrons[i].velocity.y;
+    }
+
     electrons[i].position.x += electrons[i].velocity.x * deltaTime;
+
+    if (electrons[i].position.x <= 0){
+        electrons[i].position.x = -electrons[i].position.x;
+        electrons[i].velocity.x = -electrons[i].velocity.x;
+        electrons[i].weight *= -1;
+    }
+    else if (electrons[i].position.x >= 500){
+        electrons[i].position.x = 500 - (electrons[i].position.x - 500);
+        electrons[i].velocity.x = -electrons[i].velocity.x;
+        electrons[i].weight *= -1;
+    }
 }
 
 __global__ static void updateNormal(Electron* electrons, float deltaTime, int* n, int start_n, int capacity) {
@@ -60,19 +86,20 @@ __global__ static void updateStatic(Electron* electrons, float deltaTime, int* n
 
 
 
-static void log(bool verbose, int t, Electron* electrons_host, Electron* electrons, int* n_host, int* n, int capacity){
-    if (!verbose || t % 10 != 0) return;
+static void log(int verbose, int t, Electron* electrons_host, Electron* electrons, int* n_host, int* n, int capacity){
+    if (verbose == 0 || t % verbose != 0) return;
     cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
-    cudaMemcpy(electrons_host, electrons, *n_host * sizeof(Electron), cudaMemcpyDeviceToHost);
+    int true_n = min(*n_host, capacity);
+    cudaMemcpy(electrons_host, electrons, true_n * sizeof(Electron), cudaMemcpyDeviceToHost);
     printf("Time %d, amount %d\n", t, *n_host);
-    for(int i = 0; i < min(*n_host, capacity); i++){
+    for(int i = 0; i < true_n; i++){
         printf("%d: (%.6f, %.6f) (%.6f, %.6f)\n", i, electrons_host[i].position.x, electrons_host[i].position.y, electrons_host[i].velocity.x, electrons_host[i].velocity.y);
     }
-    image(min(*n_host, capacity), electrons_host, t); // visualize a snapshot of the current positions of the particles     
+    image(true_n, electrons_host, t); // visualize a snapshot of the current positions of the particles     
     printf("\n");
 }
 
-void multiplyRun(int init_n, int capacity, int max_t, int mode, bool verbose, int block_size) {
+void multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, int block_size) {
     printf("Multiply with\ninit n: %d\ncapacity: %d\nmax t: %d\nblock size: %d\n", init_n, capacity, max_t, block_size);
 
     cudaEvent_t start, stop;
@@ -85,6 +112,8 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, bool verbose, in
         electrons_host[i].weight = 1.0;
         electrons_host[i].timestamp = -1;
     }
+
+    float delta_time = 1;
 
     Electron* electrons;
     cudaMalloc(&electrons, capacity * sizeof(Electron));
@@ -105,7 +134,7 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, bool verbose, in
             cudaEventRecord(start);
             for (int t = 1; t < max_t; t++){
                 int num_blocks = (*n_host + block_size - 1) / block_size;
-                updateNormal<<<num_blocks, block_size>>>(electrons, 0.1, n, *n_host, capacity);
+                updateNormal<<<num_blocks, block_size>>>(electrons, delta_time, n, *n_host, capacity);
                 cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
 
                 log(verbose, t, electrons_host, electrons, n_host, n, capacity);
@@ -118,7 +147,7 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, bool verbose, in
             int num_blocks = (capacity + block_size - 1) / block_size;
             cudaEventRecord(start);
             for (int t = 1; t < max_t; t++) {
-                updateHuge<<<num_blocks, block_size>>>(electrons, 0.1, n, capacity, t);
+                updateHuge<<<num_blocks, block_size>>>(electrons, delta_time, n, capacity, t);
                 log(verbose, t, electrons_host, electrons, n_host, n, capacity);
             }
             cudaEventRecord(stop);
@@ -131,7 +160,7 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, bool verbose, in
             printf("Number of blocks: %d \n",num_blocks);
             cudaEventRecord(start);
             for (int t = 1; t < max_t; t++) {
-                updateStatic<<<num_blocks, block_size>>>(electrons, 0.1, n, capacity, t);
+                updateStatic<<<num_blocks, block_size>>>(electrons, delta_time, n, capacity, t);
                 log(verbose, t, electrons_host, electrons, n_host, n, capacity);
             }
             cudaEventRecord(stop);
@@ -147,7 +176,6 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, bool verbose, in
             cudaGetDeviceProperties(&deviceProp, 0);  // What number should this actually be?
             cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksPerSm, updateStatic, numThreads, 0);
             // launch
-            float delta_time = 0.1;
             dim3 dimBlock(numThreads, 1, 1);
             dim3 dimGrid(deviceProp.multiProcessorCount*numBlocksPerSm, 1, 1);
             printf("numBlocksPerSm: %d \n",numBlocksPerSm);
@@ -171,7 +199,7 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, bool verbose, in
     }
 
     cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
-    cudaMemcpy(electrons_host, electrons, *n_host * sizeof(Electron), cudaMemcpyDeviceToHost);   
+    cudaMemcpy(electrons_host, electrons, min(*n_host, capacity) * sizeof(Electron), cudaMemcpyDeviceToHost);   
     cudaEventSynchronize(stop); //skal det være her?
 
     float runtime_ms = 0;

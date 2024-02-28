@@ -126,11 +126,9 @@ void runPIC(int init_n, int capacity, int max_t, int verbose, int block_size) {
         // log(verbose, t, electrons_host, electrons, n_host, n, capacity);
     }
     cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
-    cudaMemcpy(electrons_host, electrons, min(*n_host, capacity) * sizeof(Electron), cudaMemcpyDeviceToHost);   
-    cudaEventSynchronize(stop);
+    cudaMemcpy(electrons_host, electrons, min(*n_host, capacity) * sizeof(Electron), cudaMemcpyDeviceToHost);
 
     float runtime_ms = 0;
-    cudaEventElapsedTime(&runtime_ms, start, stop);
     printf("Final amount of particles: %d\n", min(*n_host, capacity));
     printf("GPU time of program: %f ms\n", runtime_ms);
 

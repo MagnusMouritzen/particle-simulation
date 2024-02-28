@@ -84,7 +84,7 @@ __global__ static void updateStatic(Electron* electrons, float deltaTime, int* n
     }
 }
 
-__global__ static void updateNormal(Electron* electrons, float deltaTime, int* n, int start_n, int offset, int capacity, int max_t) {
+__global__ static void updateNormalFull(Electron* electrons, float deltaTime, int* n, int start_n, int offset, int capacity, int max_t) {
     int i = blockIdx.x * blockDim.x + threadIdx.x + offset;
     
     // The thread index has passed the number of electrons. Thread returns if all electron are being handled
@@ -209,7 +209,7 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, int
             int last_n = 0;  // The amount of particles present in last run. All of these have been fully simulated.
             while(min(*n_host, capacity) != last_n){  // Stop once nothing new has happened.
                 int num_blocks = (min(*n_host, capacity) - last_n + block_size - 1) / block_size;  // We do not need blocks for the old particles.
-                updateNormal<<<num_blocks, block_size>>>(electrons, delta_time, n, min(*n_host, capacity), last_n, capacity, max_t);
+                updateNormalFull<<<num_blocks, block_size>>>(electrons, delta_time, n, min(*n_host, capacity), last_n, capacity, max_t);
                 last_n = min(*n_host, capacity);  // Update last_n to the amount just run. NOT to the amount after this run (we don't know that amount yet).
                 cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Now update to the current amount of particles.
             }

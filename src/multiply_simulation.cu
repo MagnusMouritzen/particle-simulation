@@ -53,13 +53,13 @@ __device__ static void simulate(Electron* electrons, float deltaTime, int* n, in
     }
 }
 
-__global__ static void updateNormal(Electron* electrons, float deltaTime, int* n, int start_n, int capacity) {
+__global__ static void updateNormal(Electron* electrons, float deltaTime, int* n, int start_n, int capacity, int t) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     
     // The thread index has passed the number of electrons. Thread returns if all electron are being handled
     if (i >= start_n) return;
 
-    simulate(electrons, deltaTime, n, capacity, i, 0);
+    simulate(electrons, deltaTime, n, capacity, i, t);
 }
 
 __global__ static void updateHuge(Electron* electrons, float deltaTime, int* n, int capacity, int t) {
@@ -84,6 +84,15 @@ __global__ static void updateStatic(Electron* electrons, float deltaTime, int* n
     }
 }
 
+__global__ static void updateNormal(Electron* electrons, float deltaTime, int* n, int start_n, int offset, int capacity, int max_t) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x + offset;
+    
+    // The thread index has passed the number of electrons. Thread returns if all electron are being handled
+    if (i >= start_n) return;
+    for(int t = max(1, electrons[i].timestamp + 1); t <= max_t; t++){
+        simulate(electrons, deltaTime, n, capacity, i, t);
+    }
+}
 
 
 static void log(int verbose, int t, Electron* electrons_host, Electron* electrons, int* n_host, int* n, int capacity){
@@ -93,7 +102,7 @@ static void log(int verbose, int t, Electron* electrons_host, Electron* electron
     cudaMemcpy(electrons_host, electrons, true_n * sizeof(Electron), cudaMemcpyDeviceToHost);
     printf("Time %d, amount %d\n", t, *n_host);
     for(int i = 0; i < true_n; i++){
-        printf("%d: (%.6f, %.6f) (%.6f, %.6f)\n", i, electrons_host[i].position.x, electrons_host[i].position.y, electrons_host[i].velocity.x, electrons_host[i].velocity.y);
+        printf("%d: (%.6f, %.6f) (%.6f, %.6f) [%d]\n", i, electrons_host[i].position.x, electrons_host[i].position.y, electrons_host[i].velocity.x, electrons_host[i].velocity.y, electrons_host[i].timestamp);
     }
     image(true_n, electrons_host, t); // visualize a snapshot of the current positions of the particles     
     printf("\n");
@@ -132,9 +141,9 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, int
         case 0: { // Normal
             printf("Multiply normal\n");
             cudaEventRecord(start);
-            for (int t = 1; t < max_t; t++){
-                int num_blocks = (*n_host + block_size - 1) / block_size;
-                updateNormal<<<num_blocks, block_size>>>(electrons, delta_time, n, min(*n_host, capacity), capacity);
+            for (int t = 1; t <= max_t; t++){
+                int num_blocks = (min(*n_host, capacity) + block_size - 1) / block_size;
+                updateNormal<<<num_blocks, block_size>>>(electrons, delta_time, n, min(*n_host, capacity), capacity, t);
                 cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
 
                 log(verbose, t, electrons_host, electrons, n_host, n, capacity);
@@ -146,7 +155,7 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, int
             printf("Multiply huge\n");
             int num_blocks = (capacity + block_size - 1) / block_size;
             cudaEventRecord(start);
-            for (int t = 1; t < max_t; t++) {
+            for (int t = 1; t <= max_t; t++) {
                 updateHuge<<<num_blocks, block_size>>>(electrons, delta_time, n, capacity, t);
                 log(verbose, t, electrons_host, electrons, n_host, n, capacity);
             }
@@ -159,7 +168,7 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, int
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
             printf("Number of blocks: %d \n",num_blocks);
             cudaEventRecord(start);
-            for (int t = 1; t < max_t; t++) {
+            for (int t = 1; t <= max_t; t++) {
                 updateStatic<<<num_blocks, block_size>>>(electrons, delta_time, n, capacity, t);
                 log(verbose, t, electrons_host, electrons, n_host, n, capacity);
             }
@@ -182,7 +191,7 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, int
             printf("multiProcessorCount: %d \n",deviceProp.multiProcessorCount);
 
             cudaEventRecord(start);
-            for (int t = 1; t < max_t; t++) {
+            for (int t = 1; t <= max_t; t++) {
                 void *kernelArgs[] = { &electrons, &delta_time, &n, &capacity, &t };
                 cudaLaunchCooperativeKernel((void*)updateStatic, dimGrid, dimBlock, kernelArgs);
                 log(verbose, t, electrons_host, electrons, n_host, n, capacity);
@@ -192,6 +201,22 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, int
         }
         case 4: { // Dynamic
             printf("Multiply dynamic not implemented\n");
+            break;
+        }
+        case 5: { // Normal full
+            printf("Multiply normal full\n");
+            cudaEventRecord(start);
+            int last_n = 0;  // The amount of particles present in last run. All of these have been fully simulated.
+            while(min(*n_host, capacity) != last_n){  // Stop once nothing new has happened.
+                int num_blocks = (min(*n_host, capacity) - last_n + block_size - 1) / block_size;  // We do not need blocks for the old particles.
+                updateNormal<<<num_blocks, block_size>>>(electrons, delta_time, n, min(*n_host, capacity), last_n, capacity, max_t);
+                last_n = min(*n_host, capacity);  // Update last_n to the amount just run. NOT to the amount after this run (we don't know that amount yet).
+                cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Now update to the current amount of particles.
+            }
+
+            log(verbose, max_t, electrons_host, electrons, n_host, n, capacity);
+            
+            cudaEventRecord(stop);
             break;
         }
         default:

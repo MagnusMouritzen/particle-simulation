@@ -40,6 +40,9 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[1], "6")){ //Static advanced
             multiplyRun(init_n, max_n, max_t, 3, verbose, block_size);
         }
+        else if (!strcmp(argv[1], "7")){ // Normal full
+            multiplyRun(init_n, max_n, max_t, 5, verbose, block_size);
+        }
     }
     double time = end_cpu_timer(start);
     printf("CPU time of program: %f ms\n", time);

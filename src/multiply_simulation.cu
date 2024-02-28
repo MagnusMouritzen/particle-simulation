@@ -66,7 +66,7 @@ __global__ static void updateHuge(Electron* electrons, float deltaTime, int* n, 
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     
     // The thread index has passed the number of electrons. Thread returns if all electron are being handled
-    if (i >= *n || electrons[i].timestamp == t || electrons[i].timestamp == 0) return;
+    if (i >= min(*n, capacity) || electrons[i].timestamp == t || electrons[i].timestamp == 0) return;
 
     simulate(electrons, deltaTime, n, capacity, i, t);
 }
@@ -76,7 +76,7 @@ __global__ static void updateStatic(Electron* electrons, float deltaTime, int* n
     int num_blocks = gridDim.x;
     int block_size = blockDim.x;
 
-    for (int i = thread_id; i < *n; i += num_blocks * block_size) {
+    for (int i = thread_id; i < min(*n, capacity); i += num_blocks * block_size) {
         // The thread index has passed the number of electrons. Thread returns if all electron are being handled
         if (electrons[i].timestamp == t || electrons[i].timestamp == 0) return;
 
@@ -127,7 +127,7 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, int
     Electron* electrons;
     cudaMalloc(&electrons, capacity * sizeof(Electron));
 
-    cudaMemcpy(electrons, electrons_host, init_n * sizeof(Electron), cudaMemcpyHostToDevice);
+    cudaMemcpy(electrons, electrons_host, capacity * sizeof(Electron), cudaMemcpyHostToDevice);
 
     int* n_host = (int*)malloc(sizeof(int));
     int* n;

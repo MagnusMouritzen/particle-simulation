@@ -58,7 +58,7 @@ __global__ static void updateStatic(Electron* electrons, float deltaTime, int* n
     int num_blocks = gridDim.x;
     int block_size = blockDim.x;
 
-    for (int i = thread_id; i < *n; i += num_blocks * block_size) {
+    for (int i = thread_id; i < min(*n, capacity); i += num_blocks * block_size) {
         // The thread index has passed the number of electrons. Thread returns if all electron are being handled
         if (electrons[i].timestamp == t || electrons[i].timestamp == 0) return;
 
@@ -96,7 +96,7 @@ void runPIC(int init_n, int capacity, int max_t, int verbose, int block_size) {
     Electron* electrons;
     cudaMalloc(&electrons, capacity * sizeof(Electron));
 
-    cudaMemcpy(electrons, electrons_host, init_n * sizeof(Electron), cudaMemcpyHostToDevice);
+    cudaMemcpy(electrons, electrons_host, capacity * sizeof(Electron), cudaMemcpyHostToDevice);
 
     int* n_host = (int*)malloc(sizeof(int));
     int* n;

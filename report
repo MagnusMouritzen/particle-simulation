@@ -1,4 +1,4 @@
-nsys profile --force-overwrite true -o out/report.nsys-rep ./out/main $1 0 $2 $3 $4 $5
+nsys profile --trace=cuda --force-overwrite true -o out/report.nsys-rep ./out/main $1 0 $2 $3 $4 $5
 # 1 Mode
 # 2 init n
 # 3 max t

@@ -4,14 +4,15 @@
 #include "simp_simulation.h"
 #include "global_gravity_simulation.h"
 #include "multiply_simulation.h"
-#include "utility.h"
+#include "test.h"
 
 
 int main(int argc, char **argv) {
-    if (argc < 5) {
-        printf("Too few arguments.\n1 - Mode.\n2 - Verbose.\n3 - Initial particle amount.\n4 - Max iterations.\n5 - Block size\n6 - Max particles.\n");
+    if (!strcmp(argv[1], "test")){
+        runTests();
         return 0;
     }
+
     int verbose = boost::lexical_cast<int>(argv[2]);
     int init_n = boost::lexical_cast<int>(argv[3]);
     int max_t = boost::lexical_cast<int>(argv[4]);
@@ -41,7 +42,7 @@ int main(int argc, char **argv) {
             multiplyRun(init_n, max_n, max_t, 3, verbose, block_size);
         }
         else if (!strcmp(argv[1], "7")){ // Normal full
-            multiplyRun(init_n, max_n, max_t, 5, verbose, block_size);
+            multiplyRun(init_n, max_n, max_t, 4, verbose, block_size);
         }
     }
     double time = end_cpu_timer(start);

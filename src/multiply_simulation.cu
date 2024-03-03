@@ -11,27 +11,30 @@ __device__ static void simulate(Electron* electrons, float deltaTime, int* n, in
         electrons[i].position.y = -electrons[i].position.y;
         electrons[i].velocity.y = -electrons[i].velocity.y;
 
-        int new_i = atomicAdd(n, 1);
-        if (new_i < capacity){
-            if (electrons[i].velocity.x >= 0){
-                electrons[i].velocity.x += 10;
-            }
-            else{
-                electrons[i].velocity.x -= 10;
-            }
+        if (*n < capacity) {
+            int new_i = atomicAdd(n, 1);
+        
+            if (new_i < capacity){
+                if (electrons[i].velocity.x >= 0){
+                    electrons[i].velocity.x += 10;
+                }
+                else{
+                    electrons[i].velocity.x -= 10;
+                }
 
-            //printf("Particle %d spawns particle %d\n", i, new_i);
-            electrons[new_i].position.y = electrons[i].position.y;
-            electrons[new_i].velocity.y = electrons[i].velocity.y;
-            if (electrons[i].velocity.x >= 0){
-                electrons[new_i].velocity.x = electrons[i].velocity.x - 20;
+                //printf("Particle %d spawns particle %d\n", i, new_i);
+                electrons[new_i].position.y = electrons[i].position.y;
+                electrons[new_i].velocity.y = electrons[i].velocity.y;
+                if (electrons[i].velocity.x >= 0){
+                    electrons[new_i].velocity.x = electrons[i].velocity.x - 20;
+                }
+                else{
+                    electrons[new_i].velocity.x = electrons[i].velocity.x + 20;
+                }
+                electrons[new_i].position.x = electrons[i].position.x + electrons[new_i].velocity.x * deltaTime;
+                electrons[new_i].timestamp = t;
+                electrons[new_i].weight = electrons[i].weight;
             }
-            else{
-                electrons[new_i].velocity.x = electrons[i].velocity.x + 20;
-            }
-            electrons[new_i].position.x = electrons[i].position.x + electrons[new_i].velocity.x * deltaTime;
-            electrons[new_i].timestamp = t;
-            electrons[new_i].weight = electrons[i].weight;
         }
     }
     else if (electrons[i].position.y >= 500){
@@ -127,7 +130,7 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, int
     Electron* electrons;
     cudaMalloc(&electrons, capacity * sizeof(Electron));
 
-    cudaMemcpy(electrons, electrons_host, capacity * sizeof(Electron), cudaMemcpyHostToDevice);
+    cudaMemcpy(electrons, electrons_host, init_n * sizeof(Electron), cudaMemcpyHostToDevice);
 
     int* n_host = (int*)malloc(sizeof(int));
     int* n;
@@ -176,7 +179,6 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, int
             break;
         }
         case 3: { // Static advanced
-        
             printf("Multiply static advanced\n");
             int numBlocksPerSm = 0;
             // Number of threads my_kernel will be launched with
@@ -194,6 +196,7 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, int
             for (int t = 1; t <= max_t; t++) {
                 void *kernelArgs[] = { &electrons, &delta_time, &n, &capacity, &t };
                 cudaLaunchCooperativeKernel((void*)updateStatic, dimGrid, dimBlock, kernelArgs);
+                cudaDeviceSynchronize();
                 log(verbose, t, electrons_host, electrons, n_host, n, capacity);
             }
             cudaEventRecord(stop);
@@ -221,6 +224,11 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, int
         }
         default:
             break;
+    }
+    cudaError_t error = cudaGetLastError();
+    if (error != cudaSuccess) {
+        printf("CUDA error: %s \n", cudaGetErrorString(error));
+        // Handle error appropriately
     }
 
     cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);

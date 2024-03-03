@@ -53,33 +53,28 @@ __device__ static void simulate(Electron* electrons, float deltaTime, int* n, in
     }
 }
 
-__global__ static void updateStatic(Electron* electrons, float deltaTime, int* n, int capacity, int t, int max_t) {
-    int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
-    int num_blocks = gridDim.x;
-    int block_size = blockDim.x;
-
-    for (int i = thread_id; i < min(*n, capacity); i += num_blocks * block_size) {
-        // The thread index has passed the number of electrons. Thread returns if all electron are being handled
-        if (electrons[i].timestamp == t || electrons[i].timestamp == 0) return;
-
-        for (int j = 1 ; j < max_t ; j++) {
-            simulate(electrons, deltaTime, n, capacity, i, t);
-        }
+__global__ static void updateNormalFull(Electron* electrons, float deltaTime, int* n, int start_n, int offset, int capacity, int max_t) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x + offset;
+    
+    // The thread index has passed the number of electrons. Thread returns if all electron are being handled
+    if (i >= start_n) return;
+    for(int t = max(1, electrons[i].timestamp + 1); t <= max_t; t++){
+        simulate(electrons, deltaTime, n, capacity, i, t);
     }
 }
 
-static void log(int verbose, int t, Electron* electrons_host, Electron* electrons, int* n_host, int* n, int capacity){
-    if (verbose == 0 || t % verbose != 0) return;
-    cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
-    int true_n = min(*n_host, capacity);
-    cudaMemcpy(electrons_host, electrons, true_n * sizeof(Electron), cudaMemcpyDeviceToHost);
-    printf("Time %d, amount %d\n", t, *n_host);
-    for(int i = 0; i < true_n; i++){
-        printf("%d: (%.6f, %.6f) (%.6f, %.6f)\n", i, electrons_host[i].position.x, electrons_host[i].position.y, electrons_host[i].velocity.x, electrons_host[i].velocity.y);
-    }
-    image(true_n, electrons_host, t); // visualize a snapshot of the current positions of the particles     
-    printf("\n");
-}
+// static void log(int verbose, int t, Electron* electrons_host, Electron* electrons, int* n_host, int* n, int capacity){
+//     if (verbose == 0 || t % verbose != 0) return;
+//     cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
+//     int true_n = min(*n_host, capacity);
+//     cudaMemcpy(electrons_host, electrons, true_n * sizeof(Electron), cudaMemcpyDeviceToHost);
+//     printf("Time %d, amount %d\n", t, *n_host);
+//     for(int i = 0; i < true_n; i++){
+//         printf("%d: (%.6f, %.6f) (%.6f, %.6f)\n", i, electrons_host[i].position.x, electrons_host[i].position.y, electrons_host[i].velocity.x, electrons_host[i].velocity.y);
+//     }
+//     image(true_n, electrons_host, t); // visualize a snapshot of the current positions of the particles     
+//     printf("\n");
+// }
 
 void runPIC(int init_n, int capacity, int max_t, int verbose, int block_size) {
     printf("PIC with\ninit n: %d\ncapacity: %d\nmax t: %d\nblock size: %d\n", init_n, capacity, max_t, block_size);
@@ -107,24 +102,20 @@ void runPIC(int init_n, int capacity, int max_t, int verbose, int block_size) {
     if (verbose) printf("Time %d, amount %d\n", 0, *n_host);
 
 
-    printf("Multiply static advanced\n");
-    int numBlocksPerSm = 0;
-    // Number of threads my_kernel will be launched with
-    int numThreads = block_size;
-    cudaDeviceProp deviceProp;
-    cudaGetDeviceProperties(&deviceProp, 0);  // What number should this actually be?
-    cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksPerSm, updateStatic, numThreads, 0);
-    // launch
-    dim3 dimBlock(numThreads, 1, 1);
-    dim3 dimGrid(deviceProp.multiProcessorCount*numBlocksPerSm, 1, 1);
-    printf("numBlocksPerSm: %d \n",numBlocksPerSm);
-    printf("multiProcessorCount: %d \n",deviceProp.multiProcessorCount);
-    
-    for (int i = 0; i<*n; i++) {
-        void *kernelArgs[] = { &electrons, &delta_time, &n, &capacity, &max_t };
-        cudaLaunchCooperativeKernel((void*)updateStatic, dimGrid, dimBlock, kernelArgs);
-        // log(verbose, t, electrons_host, electrons, n_host, n, capacity);
+    printf("Multiply normal full\n");
+    cudaEventRecord(start);
+    int last_n = 0;  // The amount of particles present in last run. All of these have been fully simulated.
+    while(min(*n_host, capacity) != last_n){  // Stop once nothing new has happened.
+        int num_blocks = (min(*n_host, capacity) - last_n + block_size - 1) / block_size;  // We do not need blocks for the old particles.
+        updateNormalFull<<<num_blocks, block_size>>>(electrons, delta_time, n, min(*n_host, capacity), last_n, capacity, max_t);
+        last_n = min(*n_host, capacity);  // Update last_n to the amount just run. NOT to the amount after this run (we don't know that amount yet).
+        cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Now update to the current amount of particles.
     }
+
+    log(verbose, max_t, electrons_host, electrons, n_host, n, capacity);
+    
+    cudaEventRecord(stop);
+    
     cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
     cudaMemcpy(electrons_host, electrons, min(*n_host, capacity) * sizeof(Electron), cudaMemcpyDeviceToHost);
 

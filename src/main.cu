@@ -5,6 +5,7 @@
 #include "global_gravity_simulation.h"
 #include "multiply_simulation.h"
 #include "test.h"
+#include "pic_simulation.h"
 
 
 int main(int argc, char **argv) {
@@ -43,6 +44,9 @@ int main(int argc, char **argv) {
         }
         else if (!strcmp(argv[1], "7")){ // Normal full
             multiplyRun(init_n, max_n, max_t, 4, verbose, block_size);
+        }
+        else if (!strcmp(argv[1], "8")){ // PIC
+            runPIC(init_n, max_n, max_t, verbose, block_size);
         }
     }
     double time = end_cpu_timer(start);

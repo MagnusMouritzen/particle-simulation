@@ -108,3 +108,23 @@ double end_cpu_timer(chrono::time_point<high_resolution_clock> start){
     return duration_cast<nanoseconds>(end - start).count() / 1000000.0;
 }
 
+void printTimingHeader(FILE* os){
+    fprintf(os, "func,init n,iterations,block size,time\n");
+}
+
+void printTimingData(const TimingData& data, FILE* os){
+    fprintf(os, "%s,%d,%d,%d,%f\n", data.function.c_str(), data.init_n, data.iterations, data.block_size, data.time);
+}
+
+void printCSV(const vector<TimingData>& data, FILE* os){
+    printTimingHeader(os);
+    for(const auto& d : data){
+        printTimingData(d, os);
+    }
+}
+
+void printCSV(const vector<TimingData>& data, string filename){
+    FILE* os = fopen(filename.c_str(), "w");
+    printCSV(data, os);
+    fclose(os);
+}

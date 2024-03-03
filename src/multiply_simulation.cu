@@ -1,6 +1,5 @@
 #include <cuda_runtime.h>
 #include <stdio.h>
-#include "utility.h"
 #include "multiply_simulation.h"
 
 __device__ static void simulate(Electron* electrons, float deltaTime, int* n, int capacity, int i, int t){
@@ -111,8 +110,12 @@ static void log(int verbose, int t, Electron* electrons_host, Electron* electron
     printf("\n");
 }
 
-void multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, int block_size) {
+TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, int block_size) {
     printf("Multiply with\ninit n: %d\ncapacity: %d\nmax t: %d\nblock size: %d\n", init_n, capacity, max_t, block_size);
+    TimingData data;
+    data.init_n = init_n;
+    data.iterations = max_t;
+    data.block_size = block_size;
 
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
@@ -143,6 +146,7 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, int
     switch(mode){
         case 0: { // Normal
             printf("Multiply normal\n");
+            data.function = "Normal";
             cudaEventRecord(start);
             for (int t = 1; t <= max_t; t++){
                 int num_blocks = (min(*n_host, capacity) + block_size - 1) / block_size;
@@ -156,6 +160,7 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, int
         }
         case 1: { // Huge
             printf("Multiply huge\n");
+            data.function = "Huge";
             int num_blocks = (capacity + block_size - 1) / block_size;
             cudaEventRecord(start);
             for (int t = 1; t <= max_t; t++) {
@@ -167,6 +172,7 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, int
         }
         case 2: { // Static simple
             printf("Multiply static simple\n");
+            data.function = "Static simple";
             int num_blocks;
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
             printf("Number of blocks: %d \n",num_blocks);
@@ -180,6 +186,7 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, int
         }
         case 3: { // Static advanced
             printf("Multiply static advanced\n");
+            data.function = "Static advanced";
             int numBlocksPerSm = 0;
             // Number of threads my_kernel will be launched with
             int numThreads = block_size;
@@ -202,12 +209,9 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, int
             cudaEventRecord(stop);
             break;
         }
-        case 4: { // Dynamic
-            printf("Multiply dynamic not implemented\n");
-            break;
-        }
-        case 5: { // Normal full
+        case 4: { // Normal full
             printf("Multiply normal full\n");
+            data.function = "Normal full";
             cudaEventRecord(start);
             int last_n = 0;  // The amount of particles present in last run. All of these have been fully simulated.
             while(min(*n_host, capacity) != last_n){  // Stop once nothing new has happened.
@@ -239,4 +243,6 @@ void multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, int
     cudaEventElapsedTime(&runtime_ms, start, stop);
     printf("Final amount of particles: %d\n", min(*n_host, capacity));
     printf("GPU time of program: %f ms\n", runtime_ms);
+    data.time = runtime_ms;
+    return data;
 }

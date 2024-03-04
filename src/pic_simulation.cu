@@ -6,9 +6,6 @@
 #include "utility.h"
 #include "pic_simulation.h"
 
-#define MIN 2
-#define MAX 7
-#define ITER 10000000
 
 __device__ static void simulate(Electron* electrons, float deltaTime, int* n, int capacity, int i, int t){
     electrons[i].velocity.y -= 9.82 * deltaTime * electrons[i].weight;

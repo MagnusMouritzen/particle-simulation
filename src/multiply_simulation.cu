@@ -31,8 +31,8 @@ __device__ static void simulate(Electron* electrons, float deltaTime, int* n, in
                     electrons[new_i].velocity.x = electrons[i].velocity.x + 20;
                 }
                 electrons[new_i].position.x = electrons[i].position.x + electrons[new_i].velocity.x * deltaTime;
-                electrons[new_i].timestamp = t;
                 electrons[new_i].weight = electrons[i].weight;
+                electrons[new_i].timestamp = t;
             }
         }
     }
@@ -88,6 +88,7 @@ __global__ static void updateStatic(Electron* electrons, float deltaTime, int* n
 
 __global__ static void updateNormalFull(Electron* electrons, float deltaTime, int* n, int start_n, int offset, int capacity, int max_t) {
     int i = blockIdx.x * blockDim.x + threadIdx.x + offset;
+
     
     // The thread index has passed the number of electrons. Thread returns if all electron are being handled
     if (i >= start_n) return;
@@ -96,6 +97,37 @@ __global__ static void updateNormalFull(Electron* electrons, float deltaTime, in
     }
 }
 
+__global__ static void updateNormalPersistent(Electron* electrons, float deltaTime, int** n, int capacity, int max_t) {
+    int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
+    int num_blocks = gridDim.x;
+    int block_size = blockDim.x;
+
+
+    for(int t=0; t<=max_t; t++) {
+        for (int i = thread_id; i < capacity; i += num_blocks * block_size) {
+            if (thread_id >= *n[t%2]) break;
+            simulate(electrons, deltaTime, n[t%2+1], capacity, i, t);
+        }
+        barrierWAIT(); //WAIT HERE 
+    }
+
+}
+
+__global__ static void updateGPUIterate(Electron* electrons, float deltaTime, int* n, int capacity, int max_t, int* waitCounter) {
+    int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
+    int num_blocks = gridDim.x;
+    int block_size = blockDim.x;
+
+    for (int i = thread_id; i < capacity; i += num_blocks * block_size) {
+        while(electrons[i].timestamp == 0) {
+            WAIT();
+        }
+        for(int t=max(1,electrons[i].timestamp+1); t<=max_t; t++) {
+            simulate(electrons, deltaTime, n, capacity, i, t);
+        }
+    }
+
+}
 
 static void log(int verbose, int t, Electron* electrons_host, Electron* electrons, int* n_host, int* n, int capacity){
     if (verbose == 0 || t % verbose != 0) return;
@@ -141,12 +173,18 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
     *n_host = init_n;
     cudaMemcpy(n, n_host, sizeof(int), cudaMemcpyHostToDevice);
 
+
+
+    int* waitCounter;
+    cudaMalloc(&waitCounter, sizeof(int));
+    cudaMemcpy(waitCounter, nullptr, sizeof(int), cudaMemcpyHostToDevice);
+
     if (verbose) printf("Time %d, amount %d\n", 0, *n_host);
 
     switch(mode){
-        case 0: { // Normal
-            printf("Multiply normal\n");
-            data.function = "Normal";
+        case 0: { // CPU synch iterate
+            printf("Multiply CPU synch iterate\n");
+            data.function = "CPU synch iterate";
             cudaEventRecord(start);
             for (int t = 1; t <= max_t; t++){
                 int num_blocks = (min(*n_host, capacity) + block_size - 1) / block_size;
@@ -158,9 +196,9 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
             cudaEventRecord(stop);
             break;
         }
-        case 1: { // Huge
-            printf("Multiply huge\n");
-            data.function = "Huge";
+        case 1: { // Huge iterate
+            printf("Multiply huge iterate\n");
+            data.function = "Huge iterate";
             int num_blocks = (capacity + block_size - 1) / block_size;
             cudaEventRecord(start);
             for (int t = 1; t <= max_t; t++) {
@@ -170,9 +208,9 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
             cudaEventRecord(stop);
             break;
         }
-        case 2: { // Static simple
-            printf("Multiply static simple\n");
-            data.function = "Static simple";
+        case 2: { // Static simple iterate
+            printf("Multiply static simple iterate\n");
+            data.function = "Static simple iterate";
             int num_blocks;
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
             printf("Number of blocks: %d \n",num_blocks);
@@ -184,9 +222,9 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
             cudaEventRecord(stop);
             break;
         }
-        case 3: { // Static advanced
-            printf("Multiply static advanced\n");
-            data.function = "Static advanced";
+        case 3: { // Static cooperate iterate
+            printf("Multiply static cooperate iterate\n");
+            data.function = "Static cooperate iterate";
             int numBlocksPerSm = 0;
             // Number of threads my_kernel will be launched with
             int numThreads = block_size;
@@ -209,9 +247,9 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
             cudaEventRecord(stop);
             break;
         }
-        case 4: { // Normal full
-            printf("Multiply normal full\n");
-            data.function = "Normal full";
+        case 4: { // CPU Sync Full
+            printf("Multiply CPU Sync Full\n");
+            data.function = "CPU Sync Full";
             cudaEventRecord(start);
             int last_n = 0;  // The amount of particles present in last run. All of these have been fully simulated.
             while(min(*n_host, capacity) != last_n){  // Stop once nothing new has happened.
@@ -224,6 +262,38 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
             log(verbose, max_t, electrons_host, electrons, n_host, n, capacity);
             
             cudaEventRecord(stop);
+            break;
+        }
+        case 5: { // GPU Iterate
+            printf("Multiply GPU Iterate\n");
+            data.function = "GPU Iterate";
+            int num_blocks;
+            cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
+            printf("Number of blocks: %d \n",num_blocks);
+
+            cudaEventRecord(start);
+
+            updateNormalPersistent<<<num_blocks, block_size>>>(electrons, delta_time, n, capacity, t);
+            log(verbose, t, electrons_host, electrons, n_host, n, capacity);
+
+            cudaEventRecord(stop);
+
+            break;
+        }
+        case 6: { // Static GPU Full
+            printf("Multiply normal GPU Full\n");
+            data.function = "normal GPU Full";
+            int num_blocks;
+            cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
+            printf("Number of blocks: %d \n",num_blocks);
+
+            cudaEventRecord(start);
+
+            updateGPUIterate<<<num_blocks, block_size>>>(electrons, delta_time, n, capacity, t, waitCounter);
+            log(verbose, t, electrons_host, electrons, n_host, n, capacity);
+
+            cudaEventRecord(stop);
+
             break;
         }
         default:

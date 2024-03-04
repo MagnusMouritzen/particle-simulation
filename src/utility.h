@@ -12,7 +12,7 @@ struct Electron {
         float3 position;
         float weight;
         float3 velocity;
-        int timestamp = numeric_limits<int>::max();
+        volatile int timestamp = numeric_limits<int>::max();
 };
 
 struct TimingData{

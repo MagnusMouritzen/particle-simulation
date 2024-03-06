@@ -30,26 +30,27 @@ int main(int argc, char **argv) {
     }
     else {
         int max_n = boost::lexical_cast<int>(argv[6]);
+        int sleep_time = boost::lexical_cast<int>(argv[7]);
         if (!strcmp(argv[1], "3")){ //Normal
-            multiplyRun(init_n, max_n, max_t, 0, verbose, block_size);
+            multiplyRun(init_n, max_n, max_t, 0, verbose, block_size, sleep_time);
         }
         else if (!strcmp(argv[1], "4")){ //Huge
-            multiplyRun(init_n, max_n, max_t, 1, verbose, block_size);
+            multiplyRun(init_n, max_n, max_t, 1, verbose, block_size, sleep_time);
         }
         else if (!strcmp(argv[1], "5")){ //Static
-            multiplyRun(init_n, max_n, max_t, 2, verbose, block_size);
+            multiplyRun(init_n, max_n, max_t, 2, verbose, block_size, sleep_time);
         }
         else if (!strcmp(argv[1], "6")){ //Static advanced
-            multiplyRun(init_n, max_n, max_t, 3, verbose, block_size);
+            multiplyRun(init_n, max_n, max_t, 3, verbose, block_size, sleep_time);
         }
         else if (!strcmp(argv[1], "7")){ // Normal full
-            multiplyRun(init_n, max_n, max_t, 4, verbose, block_size);
+            multiplyRun(init_n, max_n, max_t, 4, verbose, block_size, sleep_time);
         }
         else if (!strcmp(argv[1], "8")){ // GPU Iterate with barrier using global memory
-            multiplyRun(init_n, max_n, max_t, 5, verbose, block_size);
+            multiplyRun(init_n, max_n, max_t, 5, verbose, block_size, sleep_time);
         }
         else if (!strcmp(argv[1], "9")){ // GPU Iterate with barrier using multi block sync
-            multiplyRun(init_n, max_n, max_t, 6, verbose, block_size);
+            multiplyRun(init_n, max_n, max_t, 6, verbose, block_size, sleep_time);
         }
         else if (!strcmp(argv[1], "10")){ // PIC
             runPIC(init_n, max_n, max_t, verbose, block_size);

@@ -20,6 +20,7 @@ struct TimingData{
     int init_n;
     int iterations;
     int block_size;
+    int sleep_time;
     string function;
 };
 

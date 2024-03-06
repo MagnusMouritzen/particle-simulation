@@ -1,8 +1,8 @@
-#include <cuda_runtime.h>
 #include <stdio.h>
+#include <cuda_runtime.h>
+//#include <cooperative_groups.h>
 #include "multiply_simulation.h"
-#include <cooperative_groups.h>
-using namespace cooperative_groups; 
+//using namespace cooperative_groups; 
 
 __device__ static void simulate(Electron* electrons, float deltaTime, int* n, int capacity, int i, int t){
     electrons[i].velocity.y -= 9.82 * deltaTime * electrons[i].weight;
@@ -99,41 +99,52 @@ __global__ static void updateNormalFull(Electron* electrons, float deltaTime, in
     }
 }
 
-// __global__ static void updateNormalPersistentWithGlobal(Electron* electrons, float deltaTime, int* n, int capacity, int max_t, int* waitCounter, unsigned int sleep_time_ns) {
-//     int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
-//     int num_blocks = gridDim.x;
-//     int block_size = blockDim.x;
+__global__ static void updateNormalPersistentWithGlobal(Electron* electrons, float deltaTime, int* n, int start_n, int capacity, int max_t, int* wait_counter, unsigned int sleep_time_ns) {
+    int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
+    int num_blocks = gridDim.x;
+    int block_size = blockDim.x;
+    int sync_agents = block_size * num_blocks;
 
-//     for(int t=0; t<=max_t; t++) {
-//         if(thread_id == 0) printf("n0: %d, n1: %d, wait counter: %d, time: %d \n", n[0], n[1], *waitCounter, t);
-//         for (int i = thread_id; i < capacity; i += num_blocks * block_size) {
-//             if (thread_id >= n[t%2]) break;
-//             simulate(electrons, deltaTime, &n[t%2+1], capacity, i, t);
-//         }
-//         atomicAdd(waitCounter, 1);
-//         while (atomicAdd(waitCounter, 0) < block_size * num_blocks) {
-//             __nanosleep(sleep_time_ns);
-//         }
-//         atomicAdd(waitCounter, -1);
-//     }
-// }
+    for(int t=1; t<=max_t; t++) {
+        //if(thread_id == 0) printf("n0: %d, n1: %d, wait counter: %d, time: %d \n", n[0], n[1], *wait_counter, t);
+        for (int i = thread_id; i < capacity; i += num_blocks * block_size) {
+            if (thread_id >= start_n) break;
+            simulate(electrons, deltaTime, n, capacity, i, t);
+        }
+
+        int dir = (t % 2) * 2 - 1;  // Alternates between -1 and 1
+        int wait_target = (t % 2) * sync_agents;  // Alternates between 0 and sync_target;
+
+        atomicAdd(&wait_counter[0], dir);
+        while (atomicAdd(&wait_counter[0], 0) != wait_target) {
+            __nanosleep(sleep_time_ns);
+        }
+
+        start_n = atomicAdd(n, 0);
+        
+        atomicAdd(&wait_counter[1], dir);
+        while (atomicAdd(&wait_counter[1], 0) != wait_target){
+            __nanosleep(sleep_time_ns);
+        }
+    }
+}
 
 __global__ static void updateNormalPersistentWithMultiBlockSync(Electron* electrons, float deltaTime, int* n, int start_n, int capacity, int max_t) {
     int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
     int num_blocks = gridDim.x;
     int block_size = blockDim.x;
-    grid_group grid = this_grid();
+    //grid_group grid = this_grid();
     
-    for(int t=0; t<=max_t; t++) {
+    for(int t=1; t<=max_t; t++) {
         for (int i = thread_id; i < capacity; i += num_blocks * block_size) {
             if (thread_id >= start_n) break;
             simulate(electrons, deltaTime, n, capacity, i, t);
         }
-        grid.sync(); //barrier to wait for all threads in the block
+        //grid.sync(); //barrier to wait for all threads in the block
 
         start_n = atomicAdd(n, 0);
 
-        grid.sync();
+        //grid.sync();
     }
 
 }
@@ -167,12 +178,13 @@ static void log(int verbose, int t, Electron* electrons_host, Electron* electron
     printf("\n");
 }
 
-TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, int block_size) {
+TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, int block_size, int sleep_time_ns) {
     printf("Multiply with\ninit n: %d\ncapacity: %d\nmax t: %d\nblock size: %d\n", init_n, capacity, max_t, block_size);
     TimingData data;
     data.init_n = init_n;
     data.iterations = max_t;
     data.block_size = block_size;
+    data.sleep_time = sleep_time_ns;
 
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
@@ -199,8 +211,8 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
     cudaMemcpy(n, n_host, sizeof(int), cudaMemcpyHostToDevice);
 
     int* waitCounter;
-    cudaMalloc(&waitCounter, sizeof(int));
-    cudaMemset(waitCounter, 0, sizeof(int));
+    cudaMalloc(&waitCounter, 2 * sizeof(int));
+    cudaMemset(waitCounter, 0, 2 * sizeof(int));
 
 
     if (verbose) printf("Time %d, amount %d\n", 0, *n_host);
@@ -289,18 +301,18 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
             break;
         }
         case 5: { // GPU Iterate with barrier using global memory
-            // printf("Multiply GPU Iterate with global memory barrier \n");
-            // data.function = "GPU Iterate";
-            // int num_blocks;
-            // cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
-            // printf("Number of blocks: %d \n",num_blocks);
+            printf("Multiply GPU Iterate with global memory barrier \n");
+            data.function = "GPU Iterate";
+            int num_blocks;
+            cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
+            printf("Number of blocks: %d \n",num_blocks);
 
-            // cudaEventRecord(start);
+            cudaEventRecord(start);
 
-            // updateNormalPersistentWithGlobal<<<num_blocks, block_size>>>(electrons, delta_time, n_pair, capacity, max_t, waitCounter, 10);
-            // // log(verbose, t, electrons_host, electrons, n_host, n, capacity);
+            updateNormalPersistentWithGlobal<<<num_blocks, block_size>>>(electrons, delta_time, n, init_n, capacity, max_t, waitCounter, sleep_time_ns);
+            log(verbose, max_t, electrons_host, electrons, n_host, n, capacity);
 
-            // cudaEventRecord(stop);
+            cudaEventRecord(stop);
 
             break;
         }

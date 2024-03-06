@@ -5,11 +5,11 @@ using namespace std;
 void runTests(){
     vector<TimingData> data;
     int init_ns[] = {10000};
-    int block_sizes[] = {128, 256};
+    int block_sizes[] = {128};
     int max_ts[] = {10000};
     int max_ns[] = {1000000};
-    int functions[] = {5};
-    int sleep_times[] = {80, 320, 640, 1280};
+    int functions[] = {5, 6};
+    int sleep_times[] = {10, 20, 40, 80, 200, 400, 600, 800, 1000, 1200};
 
     for(int init_n : init_ns){
         for(int block_size : block_sizes){

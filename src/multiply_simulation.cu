@@ -129,6 +129,43 @@ __global__ static void updateNormalPersistentWithGlobal(Electron* electrons, flo
     }
 }
 
+__global__ static void updateNormalPersistentWithOrganisedGlobal(Electron* electrons, float deltaTime, int* n, int start_n, int capacity, int max_t, int* wait_counter, unsigned int sleep_time_ns) {
+    int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
+    int num_blocks = gridDim.x;
+    int block_size = blockDim.x;
+    int sync_agents = num_blocks;
+
+    for(int t=1; t<=max_t; t++) {
+        //if(thread_id == 0) printf("n0: %d, n1: %d, wait counter: %d, time: %d \n", n[0], n[1], *wait_counter, t);
+        for (int i = thread_id; i < capacity; i += num_blocks * block_size) {
+            if (thread_id >= start_n) break;
+            simulate(electrons, deltaTime, n, capacity, i, t);
+        }
+
+        int dir = (t % 2) * 2 - 1;  // Alternates between -1 and 1
+        int wait_target = (t % 2) * sync_agents;  // Alternates between 0 and sync_target;
+
+        
+        if (threadIdx.x == 0) {
+            atomicAdd(&wait_counter[0], dir);
+            while (atomicAdd(&wait_counter[0], 0) != wait_target) {
+                __nanosleep(sleep_time_ns);
+            }
+        }
+        __syncthreads();
+
+        start_n = atomicAdd(n, 0);
+        
+        if (threadIdx.x == 0) {
+            atomicAdd(&wait_counter[1], dir);
+            while (atomicAdd(&wait_counter[1], 0) != wait_target){
+                __nanosleep(sleep_time_ns);
+            }
+        }
+        __syncthreads();
+    }
+}
+
 __global__ static void updateNormalPersistentWithMultiBlockSync(Electron* electrons, float deltaTime, int* n, int start_n, int capacity, int max_t) {
     int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
     int num_blocks = gridDim.x;
@@ -302,7 +339,7 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
         }
         case 5: { // GPU Iterate with barrier using global memory
             printf("Multiply GPU Iterate with global memory barrier \n");
-            data.function = "GPU Iterate";
+            data.function = "GPU Iterate Global Memory";
             int num_blocks;
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
             printf("Number of blocks: %d \n",num_blocks);
@@ -316,7 +353,22 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
 
             break;
         }
-        case 6: { // GPU Iterate with barrier usign multi block sync
+        case 6: { // GPU Iterate with barrier using global memory and organised in block
+            printf("Multiply GPU Iterate with global memory barrier organised\n");
+            data.function = "GPU Iterate Global Memory Organised";
+            int num_blocks;
+            cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
+            printf("Number of blocks: %d \n",num_blocks);
+
+            cudaEventRecord(start);
+
+            updateNormalPersistentWithOrganisedGlobal<<<num_blocks, block_size>>>(electrons, delta_time, n, init_n, capacity, max_t, waitCounter, sleep_time_ns);
+            log(verbose, max_t, electrons_host, electrons, n_host, n, capacity);
+
+            cudaEventRecord(stop);
+            break;
+        }
+        case 7: { // GPU Iterate with barrier usign multi block sync
             printf("Multiply GPU Iterate with multi block sync\n");
             data.function = "GPU Iterate";
 
@@ -341,7 +393,7 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
 
             break;
         }
-        case 7: { // Static GPU Full
+        case 8: { // Static GPU Full
             // printf("Multiply normal GPU Full\n");
             // data.function = "normal GPU Full";
             // int num_blocks;
@@ -375,5 +427,12 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
     printf("Final amount of particles: %d\n", min(*n_host, capacity));
     printf("GPU time of program: %f ms\n", runtime_ms);
     data.time = runtime_ms;
+
+    free(electrons_host);
+    free(n_host);
+    cudaFree(electrons);
+    cudaFree(n);
+    cudaFree(waitCounter);
+
     return data;
 }

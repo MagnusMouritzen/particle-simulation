@@ -45,7 +45,13 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[1], "7")){ // Normal full
             multiplyRun(init_n, max_n, max_t, 4, verbose, block_size);
         }
-        else if (!strcmp(argv[1], "8")){ // PIC
+        else if (!strcmp(argv[1], "8")){ // GPU Iterate with barrier using global memory
+            multiplyRun(init_n, max_n, max_t, 5, verbose, block_size);
+        }
+        else if (!strcmp(argv[1], "9")){ // GPU Iterate with barrier using multi block sync
+            multiplyRun(init_n, max_n, max_t, 6, verbose, block_size);
+        }
+        else if (!strcmp(argv[1], "10")){ // PIC
             runPIC(init_n, max_n, max_t, verbose, block_size);
         }
     }

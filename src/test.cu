@@ -8,8 +8,8 @@ void runTests(){
     int block_sizes[] = {128,256,512};
     int max_ts[] = {10000};
     int max_ns[] = {1000000};
-    int functions[] = {5,6,7,8};
-    int sleep_times[] = {20};
+    int functions[] = {1,2,3,4,5,6,7,8,9,10,11,12};
+    int sleep_times[] = {100};
 
     for(int init_n : init_ns){
         for(int block_size : block_sizes){

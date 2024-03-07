@@ -50,18 +50,30 @@ int main(int argc, char **argv) {
             multiplyRun(init_n, max_n, max_t, 5, verbose, block_size, sleep_time);
         }
         else if (!strcmp(argv[1], "9")){ // GPU Iterate with barrier using global memory with cooperative
-            multiplyRun(init_n, max_n, max_t, 5, verbose, block_size, sleep_time);
-        }
-        else if (!strcmp(argv[1], "10")){ // GPU Iterate with barrier using global memory organised
             multiplyRun(init_n, max_n, max_t, 6, verbose, block_size, sleep_time);
         }
-        else if (!strcmp(argv[1], "11")){ // GPU Iterate with barrier using multi block sync
+        else if (!strcmp(argv[1], "10")){ // GPU Iterate with barrier using global memory organised
             multiplyRun(init_n, max_n, max_t, 7, verbose, block_size, sleep_time);
         }
-        else if (!strcmp(argv[1], "12")){ // GPU Iterate with barrier using multi block sync
+        else if (!strcmp(argv[1], "11")){ // GPU Iterate with barrier using multi block sync
             multiplyRun(init_n, max_n, max_t, 8, verbose, block_size, sleep_time);
         }
-        else if (!strcmp(argv[1], "13")){ // PIC
+        else if (!strcmp(argv[1], "12")){ // Static GPU Full
+            multiplyRun(init_n, max_n, max_t, 9, verbose, block_size, sleep_time);
+        }
+        else if (!strcmp(argv[1], "13")){ // Static GPU Full with cooperative
+            multiplyRun(init_n, max_n, max_t, 10, verbose, block_size, sleep_time);
+        }
+        else if (!strcmp(argv[1], "14")){ // Dynamic with threads
+            multiplyRun(init_n, max_n, max_t, 11, verbose, block_size, sleep_time);
+        }
+        else if (!strcmp(argv[1], "15")){ // Dynamic with blocks
+            multiplyRun(init_n, max_n, max_t, 12, verbose, block_size, sleep_time);
+        }
+        else if (!strcmp(argv[1], "16")){ // Dynamic with blocks and block checks
+            multiplyRun(init_n, max_n, max_t, 13, verbose, block_size, sleep_time);
+        }
+        else if (!strcmp(argv[1], "17")){ // PIC
             runPIC(init_n, max_n, max_t, verbose, block_size);
         }
     }

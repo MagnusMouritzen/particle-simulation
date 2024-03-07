@@ -49,16 +49,19 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[1], "8")){ // GPU Iterate with barrier using global memory
             multiplyRun(init_n, max_n, max_t, 5, verbose, block_size, sleep_time);
         }
-        else if (!strcmp(argv[1], "9")){ // GPU Iterate with barrier using global memory organised
+        else if (!strcmp(argv[1], "9")){ // GPU Iterate with barrier using global memory with cooperative
+            multiplyRun(init_n, max_n, max_t, 5, verbose, block_size, sleep_time);
+        }
+        else if (!strcmp(argv[1], "10")){ // GPU Iterate with barrier using global memory organised
             multiplyRun(init_n, max_n, max_t, 6, verbose, block_size, sleep_time);
         }
-        else if (!strcmp(argv[1], "10")){ // GPU Iterate with barrier using multi block sync
+        else if (!strcmp(argv[1], "11")){ // GPU Iterate with barrier using multi block sync
             multiplyRun(init_n, max_n, max_t, 7, verbose, block_size, sleep_time);
         }
-        else if (!strcmp(argv[1], "11")){ // GPU Iterate with barrier using multi block sync
+        else if (!strcmp(argv[1], "12")){ // GPU Iterate with barrier using multi block sync
             multiplyRun(init_n, max_n, max_t, 8, verbose, block_size, sleep_time);
         }
-        else if (!strcmp(argv[1], "12")){ // PIC
+        else if (!strcmp(argv[1], "13")){ // PIC
             runPIC(init_n, max_n, max_t, verbose, block_size);
         }
     }

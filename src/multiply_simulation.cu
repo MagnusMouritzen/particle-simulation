@@ -210,6 +210,30 @@ __global__ static void updateGPUIterate(Electron* electrons, float deltaTime, in
     }
 
 }
+__global__ static void updateGPUIterateBlockSync(Electron* electrons, float deltaTime, int* n, int capacity, int max_t, int* wait_counter, int sleep_time_ns, int* n_done) {
+    int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
+    int num_blocks = gridDim.x;
+    int block_size = blockDim.x;
+
+
+    for (int i = thread_id; i < capacity; i += num_blocks * block_size) {
+
+        while(electrons[i].timestamp == 0) {
+            int cur_n_done = *n_done;
+            __threadfence();
+            int cur_n = *n;
+            if (cur_n==cur_n_done) return;
+            __nanosleep(sleep_time_ns);
+        }
+
+        for(int t=max(1,electrons[i].timestamp+1); t<=max_t; t++) { //update particle from next time iteration
+            simulate(electrons, deltaTime, n, capacity, i, t);
+        }
+        // __threadfence(); // is it needed here?
+        atomicAdd(n_done,1);
+    }
+
+}
 
 static void log(int verbose, int t, Electron* electrons_host, Electron* electrons, int* n_host, int* n, int capacity){
     if (verbose == 0 || t % verbose != 0) return;
@@ -366,7 +390,33 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
 
             break;
         }
-        case 6: { // GPU Iterate with barrier using global memory and organised in block
+        case 6: { // GPU Iterate with barrier using global memory with cooperative
+            printf("Multiply GPU Iterate with global memory barrier \n");
+            data.function = "GPU Iterate Global Memory using cooperative";
+            
+            int numBlocksPerSm = 0;
+            int numThreads = block_size;
+            cudaDeviceProp deviceProp;
+            cudaGetDeviceProperties(&deviceProp, 0);
+            cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksPerSm, updateStatic, numThreads, 0);
+
+            cudaEventRecord(start);
+            
+            dim3 dimBlock(numThreads, 1, 1);
+            dim3 dimGrid(deviceProp.multiProcessorCount*numBlocksPerSm, 1, 1);
+
+            void *kernelArgs[] = { &electrons, &delta_time, &n, &init_n, &capacity, &max_t, &waitCounter, &sleep_time_ns };
+
+            cudaLaunchCooperativeKernel((void*)updateNormalPersistentWithGlobal, dimGrid, dimBlock, kernelArgs);
+            
+            
+            log(verbose, max_t, electrons_host, electrons, n_host, n, capacity);
+
+            cudaEventRecord(stop);
+
+            break;
+        }
+        case 7: { // GPU Iterate with barrier using global memory and organised in block
             printf("Multiply GPU Iterate with global memory barrier organised\n");
             data.function = "GPU Iterate Global Memory Organised";
             int num_blocks;
@@ -381,7 +431,7 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
             cudaEventRecord(stop);
             break;
         }
-        case 7: { // GPU Iterate with barrier using multi block sync
+        case 8: { // GPU Iterate with barrier using multi block sync
             printf("Multiply GPU Iterate with multi block sync\n");
             data.function = "GPU Iterate Multi Block Sync";
 
@@ -406,9 +456,25 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
 
             break;
         }
-        case 8: { // Static GPU Full
+        case 9: { // Static GPU Full
             printf("Multiply Static GPU Full\n");
             data.function = "Static GPU Full";
+            int num_blocks;
+            cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
+            printf("Number of blocks: %d \n",num_blocks);
+
+            cudaEventRecord(start);
+
+            updateGPUIterate<<<num_blocks, block_size>>>(electrons, delta_time, n, capacity, max_t, waitCounter, sleep_time_ns, n_done);
+            log(verbose, max_t, electrons_host, electrons, n_host, n, capacity);
+
+            cudaEventRecord(stop);
+
+            break;
+        }
+        case 10: { // Static GPU Full with grid sync
+            printf("Multiply Static GPU Full\n");
+            data.function = "Static GPU Full using grid sync";
             int num_blocks;
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
             printf("Number of blocks: %d \n",num_blocks);

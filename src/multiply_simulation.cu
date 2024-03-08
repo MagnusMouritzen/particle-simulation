@@ -303,19 +303,19 @@ static void log(int verbose, int t, Electron* electrons_host, Electron* electron
     cudaMemcpy(electrons_host, electrons, true_n * sizeof(Electron), cudaMemcpyDeviceToHost);
     printf("Time %d, amount %d\n", t, *n_host);
     for(int i = 0; i < true_n; i++){
-        printf("%d: (%.6f, %.6f) (%.6f, %.6f) [%d]\n", i, electrons_host[i].position.x, electrons_host[i].position.y, electrons_host[i].velocity.x, electrons_host[i].velocity.y, electrons_host[i].timestamp);
+        electrons_host[i].print(i);
     }
     image(true_n, electrons_host, t); // visualize a snapshot of the current positions of the particles     
     printf("\n");
 }
 
-TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, int block_size, int sleep_time_ns) {
+RunData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, int block_size, int sleep_time_ns, float delta_time) {
     printf("Multiply with\ninit n: %d\ncapacity: %d\nmax t: %d\nblock size: %d\n", init_n, capacity, max_t, block_size);
-    TimingData data;
-    data.init_n = init_n;
-    data.iterations = max_t;
-    data.block_size = block_size;
-    data.sleep_time = sleep_time_ns;
+    TimingData timing_data;
+    timing_data.init_n = init_n;
+    timing_data.iterations = max_t;
+    timing_data.block_size = block_size;
+    timing_data.sleep_time = sleep_time_ns;
 
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
@@ -327,8 +327,6 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
         electrons_host[i].weight = 1.0;
         electrons_host[i].timestamp = -1;
     }
-
-    float delta_time = 0.1;
 
     Electron* electrons;
     cudaMalloc(&electrons, capacity * sizeof(Electron));
@@ -360,7 +358,7 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
     switch(mode){
         case 0: { // CPU synch iterate
             printf("Multiply CPU synch iterate\n");
-            data.function = "CPU synch iterate";
+            timing_data.function = "CPU synch iterate";
             cudaEventRecord(start);
             for (int t = 1; t <= max_t; t++){
                 int num_blocks = (min(*n_host, capacity) + block_size - 1) / block_size;
@@ -374,7 +372,7 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
         }
         case 1: { // Huge iterate
             printf("Multiply huge iterate\n");
-            data.function = "Huge iterate";
+            timing_data.function = "Huge iterate";
             int num_blocks = (capacity + block_size - 1) / block_size;
             cudaEventRecord(start);
             for (int t = 1; t <= max_t; t++) {
@@ -386,7 +384,7 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
         }
         case 2: { // Static simple iterate
             printf("Multiply static simple iterate\n");
-            data.function = "Static simple iterate";
+            timing_data.function = "Static simple iterate";
             int num_blocks;
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
             printf("Number of blocks: %d \n",num_blocks);
@@ -400,7 +398,7 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
         }
         case 3: { // Static cooperate iterate
             printf("Multiply static cooperate iterate\n");
-            data.function = "Static cooperate iterate";
+            timing_data.function = "Static cooperate iterate";
             int numBlocksPerSm = 0;
             // Number of threads my_kernel will be launched with
             int numThreads = block_size;
@@ -425,7 +423,7 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
         }
         case 4: { // CPU Sync Full
             printf("Multiply CPU Sync Full\n");
-            data.function = "CPU Sync Full";
+            timing_data.function = "CPU Sync Full";
             cudaEventRecord(start);
             int last_n = 0;  // The amount of particles present in last run. All of these have been fully simulated.
             while(min(*n_host, capacity) != last_n){  // Stop once nothing new has happened.
@@ -442,7 +440,7 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
         }
         case 5: { // GPU Iterate with barrier using global memory
             printf("Multiply GPU Iterate with global memory barrier \n");
-            data.function = "GPU Iterate Global Memory";
+            timing_data.function = "GPU Iterate Global Memory";
             int num_blocks;
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
             printf("Number of blocks: %d \n",num_blocks);
@@ -459,7 +457,7 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
         }
         case 6: { // GPU Iterate with barrier using global memory with cooperative
             printf("Multiply GPU Iterate with global memory barrier \n");
-            data.function = "GPU Iterate Global Memory using cooperative";
+            timing_data.function = "GPU Iterate Global Memory using cooperative";
             
             int numBlocksPerSm = 0;
             int numThreads = block_size;
@@ -485,7 +483,7 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
         }
         case 7: { // GPU Iterate with barrier using global memory and organised in block
             printf("Multiply GPU Iterate with global memory barrier organised\n");
-            data.function = "GPU Iterate Global Memory Organised";
+            timing_data.function = "GPU Iterate Global Memory Organised";
             int num_blocks;
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
             printf("Number of blocks: %d \n",num_blocks);
@@ -501,7 +499,7 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
         }
         case 8: { // GPU Iterate with barrier using multi block sync
             printf("Multiply GPU Iterate with multi block sync\n");
-            data.function = "GPU Iterate Multi Block Sync";
+            timing_data.function = "GPU Iterate Multi Block Sync";
 
             int numBlocksPerSm = 0;
             int start_n = init_n;
@@ -528,7 +526,7 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
         }
         case 9: { // Static GPU Full
             printf("Multiply Static GPU Full\n");
-            data.function = "Static GPU Full";
+            timing_data.function = "Static GPU Full";
             int num_blocks;
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
             printf("Number of blocks: %d \n",num_blocks);
@@ -546,7 +544,7 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
         }
         case 10: { // Static GPU Full with cooperative
             printf("Multiply Static GPU Full\n");
-            data.function = "Static GPU Full with cooperative";
+            timing_data.function = "Static GPU Full with cooperative";
 
             int numBlocksPerSm = 0;
             // Number of threads my_kernel will be launched with
@@ -573,7 +571,7 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
         }
         case 11: { // Dynamic with threads
             printf("Multiply dynamic with threads\n");
-            data.function = "Dynamic with threads";
+            timing_data.function = "Dynamic with threads";
 
             int num_blocks;
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
@@ -590,7 +588,7 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
         }
         case 12: { // Dynamic with blocks
             printf("Multiply dynamic with blocks\n");
-            data.function = "Dynamic with blocks";
+            timing_data.function = "Dynamic with blocks";
 
             int num_blocks;
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
@@ -611,7 +609,7 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
         }
         case 13: { // Dynamic with blocks and block checks
             printf("Multiply dynamic with blocks and block checks\n");
-            data.function = "Dynamic with blocks and block checks";
+            timing_data.function = "Dynamic with blocks and block checks";
 
             int num_blocks;
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
@@ -646,14 +644,18 @@ TimingData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbos
     cudaEventElapsedTime(&runtime_ms, start, stop);
     printf("Final amount of particles: %d\n", min(*n_host, capacity));
     printf("GPU time of program: %f ms\n", runtime_ms);
-    data.time = runtime_ms;
+    timing_data.time = runtime_ms;
 
-    free(electrons_host);
+    RunData run_data;
+    run_data.timing_data = timing_data;
+    run_data.final_n = min(*n_host, capacity);
+    run_data.electrons = electrons_host;
+
     free(n_host);
     cudaFree(electrons);
     cudaFree(n);
     cudaFree(n_done);
     cudaFree(waitCounter);
 
-    return data;
+    return run_data;
 }

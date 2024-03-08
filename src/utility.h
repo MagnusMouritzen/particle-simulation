@@ -2,6 +2,7 @@
 #include <chrono>
 #include <string>
 #include <vector>
+#include <tuple>
 using namespace std;
 using chrono::high_resolution_clock;
 using chrono::duration_cast;
@@ -13,6 +14,47 @@ struct Electron {
         float weight;
         float3 velocity;
         volatile int timestamp = numeric_limits<int>::max();
+
+        void print(){
+            printf("(%.6f, %.6f) (%.6f, %.6f) (%.6f) [%d]\n", position.x, position.y, velocity.x, velocity.y, weight, timestamp);
+        }
+
+        void print(int i){
+            printf("%d: (%.6f, %.6f) (%.6f, %.6f) (%.6f) [%d]\n", i, position.x, position.y, velocity.x, velocity.y, weight, timestamp);
+        }
+
+        tuple<int, float, float, float, float, float, float, float> getKey() const {
+            return make_tuple(timestamp, weight, position.y, position.x, position.z, velocity.y, velocity.x, velocity.z);
+        }
+
+        bool operator<(const Electron& other){
+            /*if (timestamp != other.timestamp) return timestamp < other.timestamp;
+            if (weight != other.weight) return weight < other.weight;
+            if (position.y != other.position.y) return position.y < other.position.y;
+            if (position.x != other.position.x) return position.x < other.position.x;
+            if (position.z != other.position.z) return position.z < other.position.z;
+            if (velocity.y != other.velocity.y) return velocity.y < other.velocity.y;
+            if (velocity.x != other.velocity.x) return velocity.x < other.velocity.x;
+            if (velocity.z != other.velocity.z) return velocity.z < other.velocity.z;
+            return true;*/
+            return getKey() < other.getKey();
+        }
+
+        bool operator==(const Electron& other){
+            return getKey() == other.getKey();
+            return timestamp == other.timestamp &&
+            weight == other.weight &&
+            position.x == other.position.x &&
+            position.y == other.position.y &&
+            position.z == other.position.z &&
+            velocity.x == other.velocity.x &&
+            velocity.y == other.velocity.y &&
+            velocity.z == other.velocity.z;
+        }
+
+        bool operator!=(const Electron& other) {
+            return !(*this == other);
+        }
 };
 
 struct TimingData{

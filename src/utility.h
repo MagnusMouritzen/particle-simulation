@@ -13,7 +13,7 @@ struct Electron {
         float3 position;
         float weight;
         float3 velocity;
-        volatile int timestamp = numeric_limits<int>::max();
+        int timestamp = numeric_limits<int>::max();
 
         void print(){
             printf("(%.6f, %.6f) (%.6f, %.6f) (%.6f) [%d]\n", position.x, position.y, velocity.x, velocity.y, weight, timestamp);

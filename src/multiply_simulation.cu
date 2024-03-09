@@ -34,6 +34,7 @@ __device__ static void simulate(Electron* electrons, float deltaTime, int* n, in
                 }
                 electrons[new_i].position.x = electrons[i].position.x + electrons[new_i].velocity.x * deltaTime;
                 electrons[new_i].weight = electrons[i].weight;
+                __threadfence();
                 electrons[new_i].timestamp = t;
             }
         }
@@ -108,7 +109,7 @@ __global__ static void updateNormalPersistentWithGlobal(Electron* electrons, flo
     for(int t=1; t<=max_t; t++) {
         //if(thread_id == 0) printf("n0: %d, n1: %d, wait counter: %d, time: %d \n", n[0], n[1], *wait_counter, t);
         for (int i = thread_id; i < capacity; i += num_blocks * block_size) {
-            if (thread_id >= start_n) break;
+            if (i >= start_n) break;
             simulate(electrons, deltaTime, n, capacity, i, t);
         }
 
@@ -138,7 +139,7 @@ __global__ static void updateNormalPersistentWithOrganisedGlobal(Electron* elect
     for(int t=1; t<=max_t; t++) {
         //if(thread_id == 0) printf("n0: %d, n1: %d, wait counter: %d, time: %d \n", n[0], n[1], *wait_counter, t);
         for (int i = thread_id; i < capacity; i += num_blocks * block_size) {
-            if (thread_id >= start_n) break;
+            if (i >= start_n) break;
             simulate(electrons, deltaTime, n, capacity, i, t);
         }
 
@@ -174,7 +175,7 @@ __global__ static void updateNormalPersistentWithMultiBlockSync(Electron* electr
     
     for(int t=1; t<=max_t; t++) {
         for (int i = thread_id; i < capacity; i += num_blocks * block_size) {
-            if (thread_id >= start_n) break;
+            if (i >= start_n) break;
             simulate(electrons, deltaTime, n, capacity, i, t);
         }
         grid.sync(); //barrier to wait for all threads in the block
@@ -482,6 +483,7 @@ RunData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, 
             break;
         }
         case 7: { // GPU Iterate with barrier using global memory and organised in block
+            // DOES NOT WORK
             printf("Multiply GPU Iterate with global memory barrier organised\n");
             timing_data.function = "GPU Iterate Global Memory Organised";
             int num_blocks;

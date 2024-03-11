@@ -78,8 +78,18 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[1], "16")){ // Dynamic with blocks and block checks
             multiplyRun(init_n, max_n, max_t, 13, verbose, block_size, sleep_time, 0.1);
         }
-        else if (!strcmp(argv[1], "17")){ // PIC
-            runPIC(init_n, max_n, max_t, verbose, block_size);
+        //MVP
+        else if (!strcmp(argv[1], "20")){ // MVP Naive
+            runMVP(init_n, max_n, max_t, 0, verbose, block_size, sleep_time, 0.1);
+        }
+        else if (!strcmp(argv[1], "20")){ // MVP CPU Sync
+            runMVP(init_n, max_n, max_t, 1, verbose, block_size, sleep_time, 0.1);
+        }
+        else if (!strcmp(argv[1], "20")){ // MVP Static
+            runMVP(init_n, max_n, max_t, 2, verbose, block_size, sleep_time, 0.1);
+        }
+        else if (!strcmp(argv[1], "20")){ // MVP Dynamic
+            runMVP(init_n, max_n, max_t, 3, verbose, block_size, sleep_time, 0.1);
         }
     }
     double time = end_cpu_timer(start);

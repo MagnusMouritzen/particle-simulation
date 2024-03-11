@@ -6,12 +6,16 @@
 #include "utility.h"
 #include "mvp.h"
 
+__device__ curandState *rand_state;
 
 __device__ static void simulate(Electron* electrons, float deltaTime, int* n, int capacity, int i, int t){
 
     float myrandf = curand_uniform(rand_state+i);
-    myrandf *= (10 - 5 +0.999999);
-    myrandf += 5;
+    float min = 5;
+    float max = 10;
+    myrandf *= (max - min +0.999999);
+    myrandf += min;
+    
     int mob_steps = (int)truncf(myrandf);
 
     electrons[i].velocity.y -= 9.82 * deltaTime * electrons[i].weight;
@@ -141,8 +145,6 @@ __global__ static void updateDynamicBlocks(Electron* electrons, float deltaTime,
 
 void runMVP (int init_n, int capacity, int max_t, int mode, int verbose, int block_size, int sleep_time_ns, float delta_time) {
 
-
-    curandState *d_state;
     cudaMalloc(&d_state, sizeof(curandState));
 
     setup_kernel<<<10, block_size>>>(d_state);

@@ -7,56 +7,63 @@
 #include "mvp.h"
 
 
-__device__ static void simulate(Electron* d_electrons, float deltaTime, int* n, int capacity, int i, int t){
-    d_electrons[i].velocity.y -= 9.82 * deltaTime * d_electrons[i].weight;
-    d_electrons[i].position.y += d_electrons[i].velocity.y * deltaTime;
+__device__ static void simulate(Electron* electrons, float deltaTime, int* n, int capacity, int i, int t){
 
-    if (d_electrons[i].position.y <= 0){
-        d_electrons[i].position.y = -d_electrons[i].position.y;
-        d_electrons[i].velocity.y = -d_electrons[i].velocity.y;
+    float myrandf = curand_uniform(rand_state+i);
+    myrandf *= (10 - 5 +0.999999);
+    myrandf += 5;
+    int mob_steps = (int)truncf(myrandf);
+
+    electrons[i].velocity.y -= 9.82 * deltaTime * electrons[i].weight;
+    electrons[i].position.y += electrons[i].velocity.y * deltaTime;
+
+    if (electrons[i].position.y <= 0){
+        electrons[i].position.y = -electrons[i].position.y;
+        electrons[i].velocity.y = -electrons[i].velocity.y;
 
         if (*n < capacity) {
             int new_i = atomicAdd(n, 1);
         
             if (new_i < capacity){
-                if (d_electrons[i].velocity.x >= 0){
-                    d_electrons[i].velocity.x += 10;
+                if (electrons[i].velocity.x >= 0){
+                    electrons[i].velocity.x += 10;
                 }
                 else{
-                    d_electrons[i].velocity.x -= 10;
+                    electrons[i].velocity.x -= 10;
                 }
 
                 //printf("Particle %d spawns particle %d\n", i, new_i);
-                d_electrons[new_i].position.y = d_electrons[i].position.y;
-                d_electrons[new_i].velocity.y = d_electrons[i].velocity.y;
-                if (d_electrons[i].velocity.x >= 0){
-                    d_electrons[new_i].velocity.x = d_electrons[i].velocity.x - 20;
+                electrons[new_i].position.y = electrons[i].position.y;
+                electrons[new_i].velocity.y = electrons[i].velocity.y;
+                if (electrons[i].velocity.x >= 0){
+                    electrons[new_i].velocity.x = electrons[i].velocity.x - 20;
                 }
                 else{
-                    d_electrons[new_i].velocity.x = d_electrons[i].velocity.x + 20;
+                    electrons[new_i].velocity.x = electrons[i].velocity.x + 20;
                 }
-                d_electrons[new_i].position.x = d_electrons[i].position.x + d_electrons[new_i].velocity.x * deltaTime;
-                d_electrons[new_i].timestamp = t;
-                d_electrons[new_i].weight = d_electrons[i].weight;
+                electrons[new_i].position.x = electrons[i].position.x + electrons[new_i].velocity.x * deltaTime;
+                electrons[new_i].weight = electrons[i].weight;
+                __threadfence();
+                electrons[new_i].timestamp = t;
             }
         }
     }
-    else if (d_electrons[i].position.y >= 500){
-        d_electrons[i].position.y = 500 - (d_electrons[i].position.y - 500);
-        d_electrons[i].velocity.y = -d_electrons[i].velocity.y;
+    else if (electrons[i].position.y >= 500){
+        electrons[i].position.y = 500 - (electrons[i].position.y - 500);
+        electrons[i].velocity.y = -electrons[i].velocity.y;
     }
 
-    d_electrons[i].position.x += d_electrons[i].velocity.x * deltaTime;
+    electrons[i].position.x += electrons[i].velocity.x * deltaTime;
 
-    if (d_electrons[i].position.x <= 0){
-        d_electrons[i].position.x = -d_electrons[i].position.x;
-        d_electrons[i].velocity.x = -d_electrons[i].velocity.x;
-        d_electrons[i].weight *= -1;
+    if (electrons[i].position.x <= 0){
+        electrons[i].position.x = -electrons[i].position.x;
+        electrons[i].velocity.x = -electrons[i].velocity.x;
+        electrons[i].weight *= -1;
     }
-    else if (d_electrons[i].position.x >= 500){
-        d_electrons[i].position.x = 500 - (d_electrons[i].position.x - 500);
-        d_electrons[i].velocity.x = -d_electrons[i].velocity.x;
-        d_electrons[i].weight *= -1;
+    else if (electrons[i].position.x >= 500){
+        electrons[i].position.x = 500 - (electrons[i].position.x - 500);
+        electrons[i].velocity.x = -electrons[i].velocity.x;
+        electrons[i].weight *= -1;
     }
 }
 // Kernel for random numbers

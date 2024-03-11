@@ -15,7 +15,7 @@ __device__ static void simulate(Electron* electrons, float deltaTime, int* n, in
     float max = 10;
     myrandf *= (max - min +0.999999);
     myrandf += min;
-    
+
     int mob_steps = (int)truncf(myrandf);
 
     electrons[i].velocity.y -= 9.82 * deltaTime * electrons[i].weight;
@@ -74,6 +74,15 @@ __device__ static void simulate(Electron* electrons, float deltaTime, int* n, in
 __global__ void setup_kernel(curandState *state) {
     int idx = threadIdx.x+blockDim.x*blockIdx.x;
     curand_init(1234, idx, 0, &state[idx]);
+}
+
+__global__ static void updateNormal(Electron* electrons, float deltaTime, int* n, int start_n, int capacity, int t) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    // The thread index has passed the number of electrons. Thread returns if all electron are being handled
+    if (i >= start_n) return;
+
+    simulate(electrons, deltaTime, n, capacity, i, t);
 }
 
 __global__ static void updateNormalFull(Electron* d_electrons, float deltaTime, int* n, int start_n, int offset, int capacity, int max_t) {
@@ -180,8 +189,13 @@ void runMVP (int init_n, int capacity, int max_t, int mode, int verbose, int blo
     cudaMemset(i_global, 0, sizeof(int));
 
     switch(mode){
-        case 0: { //Naive
-
+        case 0: { //Naive      
+            for (int t = 1; t <= max_t; t++){
+                int num_blocks = (min(*n_host, capacity) + block_size - 1) / block_size;
+                updateNormal<<<num_blocks, block_size>>>(electrons, delta_time, n, min(*n_host, capacity), capacity, t);
+                
+                cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
+            }
             break;
         }
         case 1: { //CPU Sync

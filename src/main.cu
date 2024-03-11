@@ -5,7 +5,7 @@
 #include "global_gravity_simulation.h"
 #include "multiply_simulation.h"
 #include "test.h"
-#include "pic_simulation.h"
+#include "mvp.h"
 
 
 int main(int argc, char **argv) {

@@ -1,1 +1,1 @@
-void runMVP(int init_n, int capacity, int max_t, int verbose, int block_size);
+void runMVP(int init_n, int capacity, int max_t, int mode, int verbose, int block_size, int sleep_time_ns, float delta_time);

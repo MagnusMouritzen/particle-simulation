@@ -82,13 +82,13 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[1], "20")){ // MVP Naive
             runMVP(init_n, max_n, max_t, 0, verbose, block_size, sleep_time, 0.1);
         }
-        else if (!strcmp(argv[1], "20")){ // MVP CPU Sync
+        else if (!strcmp(argv[1], "21")){ // MVP CPU Sync
             runMVP(init_n, max_n, max_t, 1, verbose, block_size, sleep_time, 0.1);
         }
-        else if (!strcmp(argv[1], "20")){ // MVP Static
+        else if (!strcmp(argv[1], "22")){ // MVP Static
             runMVP(init_n, max_n, max_t, 2, verbose, block_size, sleep_time, 0.1);
         }
-        else if (!strcmp(argv[1], "20")){ // MVP Dynamic
+        else if (!strcmp(argv[1], "23")){ // MVP Dynamic
             runMVP(init_n, max_n, max_t, 3, verbose, block_size, sleep_time, 0.1);
         }
     }

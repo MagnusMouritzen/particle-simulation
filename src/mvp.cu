@@ -193,7 +193,7 @@ void runMVP (int init_n, int capacity, int max_t, int mode, int verbose, int blo
             for (int t = 1; t <= max_t; t++){
                 int num_blocks = (min(*n_host, capacity) + block_size - 1) / block_size;
                 updateNormal<<<num_blocks, block_size>>>(electrons, delta_time, n, min(*n_host, capacity), capacity, t);
-                
+
                 cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
             }
             break;
@@ -229,7 +229,6 @@ void runMVP (int init_n, int capacity, int max_t, int mode, int verbose, int blo
 
             break;
         }
-
         default:
             break;
     }

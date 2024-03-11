@@ -1,3 +1,4 @@
+#pragma once
 #include <limits>
 #include <chrono>
 #include <string>
@@ -64,6 +65,12 @@ struct TimingData{
     int block_size;
     int sleep_time;
     string function;
+};
+
+struct RunData{
+    TimingData timing_data;
+    int final_n;
+    Electron* electrons;
 };
 
 float randomFloat();

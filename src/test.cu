@@ -1,5 +1,5 @@
 #include <algorithm>
-#include "multiply_simulation.h"
+#include "mvp.h"
 #include "test.h"
 using namespace std;
 
@@ -9,7 +9,7 @@ void runBenchmark(){
     int block_sizes[] = {128,256,512};
     int max_ts[] = {10000};
     int max_ns[] = {10000000};
-    int functions[] = {1,2,3,4,5,6,8,9,10,11,12};
+    int functions[] = {0,1,2,3};
     int sleep_times[] = {100};
 
     for(int init_n : init_ns){
@@ -18,7 +18,7 @@ void runBenchmark(){
                 for(int max_n : max_ns){
                     for(int sleep_time : sleep_times){
                         for(int function : functions){
-                            RunData run_data = multiplyRun(init_n, max_n, max_t, function, 0, block_size, sleep_time, 0.01);
+                            RunData run_data = runMVP(init_n, max_n, max_t, function, 0, block_size, sleep_time, 0.01);
                             data.push_back(run_data.timing_data);
                             free(run_data.electrons);
                         }
@@ -35,13 +35,13 @@ void runUnitTest(int init_n, int max_n, int max_t, int verbose, int block_size, 
     // run test 0 1 200 256 10000000 100
 
     int base_function = 0;
-    int test_functions[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+    int test_functions[] = {1, 2, 3};
     //int test_functions[] = {4};
     int amnt = sizeof(test_functions) / sizeof(int);
     bool broken[amnt];
     int final_ns[amnt];
 
-    RunData base_run_data = multiplyRun(init_n, max_n, max_t, base_function, 0, block_size, sleep_time, 1);
+    RunData base_run_data = runMVP(init_n, max_n, max_t, base_function, 0, block_size, sleep_time, 1);
     Electron* base_electrons = base_run_data.electrons;
     int base_final_n = base_run_data.final_n;
     printf("Sorting base...\n");
@@ -51,7 +51,7 @@ void runUnitTest(int init_n, int max_n, int max_t, int verbose, int block_size, 
     for(int fi = 0; fi < amnt; fi++){
         int function = test_functions[fi];
         broken[fi] = false;
-        RunData run_data = multiplyRun(init_n, max_n, max_t, function, 0, block_size, sleep_time, 1);
+        RunData run_data = runMVP(init_n, max_n, max_t, function, 0, block_size, sleep_time, 1);
         Electron* electrons = run_data.electrons;
         int final_n = run_data.final_n;
         final_ns[fi] = final_n;

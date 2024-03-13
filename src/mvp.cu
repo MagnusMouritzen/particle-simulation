@@ -9,6 +9,7 @@
 // __device__ curandState *d_rand_state;
 
 __shared__ int i_block;
+__shared__ int capacity;
 
 __device__ static void simulate(Electron* d_electrons, float deltaTime, int* n, int capacity, int i, int t){
 
@@ -170,6 +171,17 @@ static void log(int verbose, int t, Electron* electrons_host, Electron* electron
 
 RunData runMVP (int init_n, int capacity, int max_t, int mode, int verbose, int block_size, int sleep_time_ns, float delta_time) {
 
+    TimingData timing_data;
+    timing_data.init_n = init_n;
+    timing_data.iterations = max_t;
+    timing_data.block_size = block_size;
+    timing_data.sleep_time = sleep_time_ns;
+
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
+
     // cudaMalloc(&d_rand_state, sizeof(curandState));
 
     // setup_kernel<<<1, 1>>>();
@@ -201,15 +213,20 @@ RunData runMVP (int init_n, int capacity, int max_t, int mode, int verbose, int 
 
     switch(mode){
         case 0: { //Naive      
+            timing_data.function = "Naive";
+            cudaEventRecord(start);
             for (int t = 1; t <= max_t; t++){
                 int num_blocks = (min(*n_host, capacity) + block_size - 1) / block_size;
                 naive<<<num_blocks, block_size>>>(d_electrons, delta_time, n, min(*n_host, capacity), capacity, t);
 
                 cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
             }
+            cudaEventRecord(stop);
             break;
         }
         case 1: { //CPU Sync
+            timing_data.function = "CPU Sync";
+            cudaEventRecord(start);
             int last_n = 0;  // The amount of particles present in last run. All of these have been fully simulated.
             while(min(*n_host, capacity) != last_n){  // Stop once nothing new has happened.
                 int num_blocks = (min(*n_host, capacity) - last_n + block_size - 1) / block_size;  // We do not need blocks for the old particles.
@@ -217,22 +234,26 @@ RunData runMVP (int init_n, int capacity, int max_t, int mode, int verbose, int 
                 last_n = min(*n_host, capacity);  // Update last_n to the amount just run. NOT to the amount after this run (we don't know that amount yet).
                 cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Now update to the current amount of particles.
             }
-            
+            cudaEventRecord(stop);
             break;
         }
         case 2: { //Static
+            timing_data.function = "Static";
             int num_blocks;
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
-
+            cudaEventRecord(start);
             staticGpu<<<num_blocks, block_size>>>(d_electrons, delta_time, n, capacity, max_t, sleep_time_ns, n_done);
+            cudaEventRecord(stop);
             
             break;
         }
         case 3: { //Dynamic
+            timing_data.function = "Dynamic";
             int num_blocks;
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
-
+            cudaEventRecord(start);
             dynamicGpu<<<num_blocks, block_size>>>(d_electrons, delta_time, n, capacity, max_t, sleep_time_ns, n_done, i_global);
+            cudaEventRecord(stop);
             break;
         }
         default:
@@ -250,6 +271,13 @@ RunData runMVP (int init_n, int capacity, int max_t, int mode, int verbose, int 
 
     cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
     cudaMemcpy(h_electrons, d_electrons, min(*n_host, capacity) * sizeof(Electron), cudaMemcpyDeviceToHost);   
+
+    cudaEventSynchronize(stop);
+    float runtime_ms = 0;
+    cudaEventElapsedTime(&runtime_ms, start, stop);
+    printf("Final amount of particles: %d\n", min(*n_host, capacity));
+    printf("GPU time of program: %f ms\n", runtime_ms);
+    timing_data.time = runtime_ms;
 
     RunData run_data;
     run_data.final_n = min(*n_host, capacity);

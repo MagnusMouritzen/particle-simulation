@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <curand.h>
 #include <curand_kernel.h>
+#include <cstring>
 #include <math.h>
 #include "mvp.h"
 
@@ -98,7 +99,7 @@ __global__ static void cpuSynch(Electron* d_electrons, float deltaTime, int* n, 
     }
 }
 
-__global__ static void staticGpu(Electron* d_electrons, float deltaTime, int* n, int capacity, int max_t, int* wait_counter, int sleep_time_ns, int* n_done) {
+__global__ static void staticGpu(Electron* d_electrons, float deltaTime, int* n, int capacity, int max_t, int sleep_time_ns, int* n_done) {
     int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
     int num_blocks = gridDim.x;
     int block_size = blockDim.x;
@@ -123,7 +124,7 @@ __global__ static void staticGpu(Electron* d_electrons, float deltaTime, int* n,
 
 }
 
-__global__ static void dynamicGpu(Electron* d_electrons, float deltaTime, int* n, int capacity, int max_t, int* wait_counter, int sleep_time_ns, int* n_done, int* i_global) {
+__global__ static void dynamicGpu(Electron* d_electrons, float deltaTime, int* n, int capacity, int max_t, int sleep_time_ns, int* n_done, int* i_global) {
 
     while (true) {
         __syncthreads(); //sync threads seems to be able to handle threads being terminated
@@ -190,14 +191,10 @@ RunData runMVP (int init_n, int capacity, int max_t, int mode, int verbose, int 
     *n_host = init_n;
     cudaMemcpy(n, n_host, sizeof(int), cudaMemcpyHostToDevice);
 
-    int* waitCounter;
-    cudaMalloc(&waitCounter, 2 * sizeof(int));
-    cudaMemset(waitCounter, 0, 2 * sizeof(int));
-
     int* n_done;
     cudaMalloc(&n_done, sizeof(int));
     cudaMemset(n_done, 0, sizeof(int));
-
+    
     int* i_global;
     cudaMalloc(&i_global, sizeof(int));
     cudaMemset(i_global, 0, sizeof(int));
@@ -227,7 +224,7 @@ RunData runMVP (int init_n, int capacity, int max_t, int mode, int verbose, int 
             int num_blocks;
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
 
-            staticGpu<<<num_blocks, block_size>>>(d_electrons, delta_time, n, capacity, max_t, waitCounter, sleep_time_ns, n_done);
+            staticGpu<<<num_blocks, block_size>>>(d_electrons, delta_time, n, capacity, max_t, sleep_time_ns, n_done);
             
             break;
         }
@@ -235,7 +232,7 @@ RunData runMVP (int init_n, int capacity, int max_t, int mode, int verbose, int 
             int num_blocks;
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
 
-            dynamicGpu<<<num_blocks, block_size>>>(d_electrons, delta_time, n, capacity, max_t, waitCounter, sleep_time_ns, n_done, i_global);
+            dynamicGpu<<<num_blocks, block_size>>>(d_electrons, delta_time, n, capacity, max_t, sleep_time_ns, n_done, i_global);
             break;
         }
         default:
@@ -256,13 +253,16 @@ RunData runMVP (int init_n, int capacity, int max_t, int mode, int verbose, int 
 
     RunData run_data;
     run_data.final_n = min(*n_host, capacity);
-    run_data.electrons = h_electrons;
+
+    run_data.electrons = new Electron[capacity];
+    memcpy(run_data.electrons, h_electrons, capacity * sizeof(Electron));
 
     free(n_host);
+    free(h_electrons);
     cudaFree(d_electrons);
     cudaFree(n);
     cudaFree(n_done);
-    cudaFree(waitCounter);
+    cudaFree(i_global);
 
     return run_data;
 }

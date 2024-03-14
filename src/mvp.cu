@@ -82,28 +82,13 @@ __device__ static void simulate(Electron* d_electrons, float deltaTime, int* n, 
 }
 
 __device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, int i, int start_t, int max_t){
-    Electron electron;
-    electron.timestamp = d_electrons[i].timestamp;
-    electron.weight = d_electrons[i].weight;
-    electron.velocity.x = d_electrons[i].velocity.x;
-    electron.velocity.y = d_electrons[i].velocity.y;
-    electron.velocity.z = d_electrons[i].velocity.z;
-    electron.position.x = d_electrons[i].position.x;
-    electron.position.y = d_electrons[i].position.y;
-    electron.position.z = d_electrons[i].position.z;
+    Electron electron = d_electrons[i];
 
     for(int t = start_t; t <= max_t; t++){
         updateParticle(&electron, d_electrons, deltaTime, n, capacity, t);
     }
 
-    d_electrons[i].timestamp = electron.timestamp;
-    d_electrons[i].weight = electron.weight;
-    d_electrons[i].velocity.x = electron.velocity.x;
-    d_electrons[i].velocity.y = electron.velocity.y;
-    d_electrons[i].velocity.z = electron.velocity.z;
-    d_electrons[i].position.x = electron.position.x;
-    d_electrons[i].position.y = electron.position.y;
-    d_electrons[i].position.z = electron.position.z;
+    d_electrons[i] = electron;
 }
 
 // // Kernel for random numbers

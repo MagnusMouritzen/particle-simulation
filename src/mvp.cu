@@ -280,8 +280,8 @@ RunData runMVP (int init_n, int capacity, int max_t, int mode, int verbose, int 
     timing_data.time = runtime_ms;
 
     RunData run_data;
+    run_data.timing_data = timing_data;
     run_data.final_n = min(*n_host, capacity);
-
     run_data.electrons = new Electron[capacity];
     memcpy(run_data.electrons, h_electrons, capacity * sizeof(Electron));
 

@@ -6,7 +6,7 @@ using namespace std;
 void runBenchmark(){
     vector<TimingData> data;
     int init_ns[] = {100000};
-    int block_sizes[] = {128,256,512};
+    int block_sizes[] = {512};
     int max_ts[] = {10000};
     int max_ns[] = {10000000};
     int functions[] = {0,1,2,3};

@@ -4,6 +4,7 @@
 #include <curand_kernel.h>
 #include <cstring>
 #include <math.h>
+#include <stdexcept>
 #include "mvp.h"
 
 // __device__ curandState *d_rand_state;
@@ -167,9 +168,17 @@ static void log(int verbose, int t, Electron* electrons_host, Electron* electron
     }
     image(true_n, electrons_host, t); // visualize a snapshot of the current positions of the particles     
     printf("\n");
+    
+    cudaError_t error = cudaGetLastError();
+    if (error != cudaSuccess) {
+        printf("CUDA error: %s \n", cudaGetErrorString(error));
+        throw runtime_error(cudaGetErrorString(error));
+        // Handle error appropriately
+    }
 }
 
 RunData runMVP (int init_n, int capacity, int max_t, int mode, int verbose, int block_size, int sleep_time_ns, float delta_time) {
+    printf("MVP with\ninit n: %d\ncapacity: %d\nmax t: %d\nblock size: %d\nsleep time: %d\ndelta time: %f\n", init_n, capacity, max_t, block_size, sleep_time_ns, delta_time);
 
     TimingData timing_data;
     timing_data.init_n = init_n;
@@ -218,7 +227,7 @@ RunData runMVP (int init_n, int capacity, int max_t, int mode, int verbose, int 
             for (int t = 1; t <= max_t; t++){
                 int num_blocks = (min(*n_host, capacity) + block_size - 1) / block_size;
                 naive<<<num_blocks, block_size>>>(d_electrons, delta_time, n, min(*n_host, capacity), capacity, t);
-
+                log(verbose, t, h_electrons, d_electrons, n_host, n, capacity);
                 cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
             }
             cudaEventRecord(stop);
@@ -262,6 +271,7 @@ RunData runMVP (int init_n, int capacity, int max_t, int mode, int verbose, int 
     cudaError_t error = cudaGetLastError();
     if (error != cudaSuccess) {
         printf("CUDA error: %s \n", cudaGetErrorString(error));
+        throw runtime_error(cudaGetErrorString(error));
         // Handle error appropriately
     }
 

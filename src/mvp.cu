@@ -12,7 +12,7 @@
 __shared__ int i_block;
 __shared__ int capacity;
 
-__device__ static void simulate(Electron* d_electrons, float deltaTime, int* n, int capacity, int i, int t){
+__device__ static void updateParticle(Electron* electron, Electron* new_electrons, float deltaTime, int* n, int capacity, int t){
 
     // float myrandf = curand_uniform(d_rand_state+i);
     // float min = 5;
@@ -24,58 +24,88 @@ __device__ static void simulate(Electron* d_electrons, float deltaTime, int* n, 
 
     // printf("random %d", mob_steps);
 
-    d_electrons[i].velocity.y -= 9.82 * deltaTime * d_electrons[i].weight;
-    d_electrons[i].position.y += d_electrons[i].velocity.y * deltaTime;
+    electron->velocity.y -= 9.82 * deltaTime * electron->weight;
+    electron->position.y += electron->velocity.y * deltaTime;
 
-    if (d_electrons[i].position.y <= 0){
-        d_electrons[i].position.y = -d_electrons[i].position.y;
-        d_electrons[i].velocity.y = -d_electrons[i].velocity.y;
+    if (electron->position.y <= 0){
+        electron->position.y = -electron->position.y;
+        electron->velocity.y = -electron->velocity.y;
 
         if (*n < capacity) {
             int new_i = atomicAdd(n, 1);
         
             if (new_i < capacity){
-                if (d_electrons[i].velocity.x >= 0){
-                    d_electrons[i].velocity.x += 10;
+                if (electron->velocity.x >= 0){
+                    electron->velocity.x += 10;
                 }
                 else{
-                    d_electrons[i].velocity.x -= 10;
+                    electron->velocity.x -= 10;
                 }
 
                 //printf("Particle %d spawns particle %d\n", i, new_i);
-                d_electrons[new_i].position.y = d_electrons[i].position.y;
-                d_electrons[new_i].velocity.y = d_electrons[i].velocity.y;
-                if (d_electrons[i].velocity.x >= 0){
-                    d_electrons[new_i].velocity.x = d_electrons[i].velocity.x - 20;
+                new_electrons[new_i].position.y = electron->position.y;
+                new_electrons[new_i].velocity.y = electron->velocity.y;
+                if (electron->velocity.x >= 0){
+                    new_electrons[new_i].velocity.x = electron->velocity.x - 20;
                 }
                 else{
-                    d_electrons[new_i].velocity.x = d_electrons[i].velocity.x + 20;
+                    new_electrons[new_i].velocity.x = electron->velocity.x + 20;
                 }
-                d_electrons[new_i].position.x = d_electrons[i].position.x + d_electrons[new_i].velocity.x * deltaTime;
-                d_electrons[new_i].weight = d_electrons[i].weight;
+                new_electrons[new_i].position.x = electron->position.x + new_electrons[new_i].velocity.x * deltaTime;
+                new_electrons[new_i].weight = electron->weight;
                 __threadfence();
-                d_electrons[new_i].timestamp = t;
+                new_electrons[new_i].timestamp = t;
             }
         }
     }
-    else if (d_electrons[i].position.y >= 500){
-        d_electrons[i].position.y = 500 - (d_electrons[i].position.y - 500);
-        d_electrons[i].velocity.y = -d_electrons[i].velocity.y;
+    else if (electron->position.y >= 500){
+        electron->position.y = 500 - (electron->position.y - 500);
+        electron->velocity.y = -electron->velocity.y;
     }
 
-    d_electrons[i].position.x += d_electrons[i].velocity.x * deltaTime;
+    electron->position.x += electron->velocity.x * deltaTime;
 
-    if (d_electrons[i].position.x <= 0){
-        d_electrons[i].position.x = -d_electrons[i].position.x;
-        d_electrons[i].velocity.x = -d_electrons[i].velocity.x;
-        d_electrons[i].weight *= -1;
+    if (electron->position.x <= 0){
+        electron->position.x = -electron->position.x;
+        electron->velocity.x = -electron->velocity.x;
+        electron->weight *= -1;
     }
-    else if (d_electrons[i].position.x >= 500){
-        d_electrons[i].position.x = 500 - (d_electrons[i].position.x - 500);
-        d_electrons[i].velocity.x = -d_electrons[i].velocity.x;
-        d_electrons[i].weight *= -1;
+    else if (electron->position.x >= 500){
+        electron->position.x = 500 - (electron->position.x - 500);
+        electron->velocity.x = -electron->velocity.x;
+        electron->weight *= -1;
     }
 }
+
+__device__ static void simulate(Electron* d_electrons, float deltaTime, int* n, int capacity, int i, int t){
+    updateParticle(&d_electrons[i], d_electrons, deltaTime, n, capacity, t);
+}
+
+__device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, int i, int start_t, int max_t){
+    Electron electron;
+    electron.timestamp = d_electrons[i].timestamp;
+    electron.weight = d_electrons[i].weight;
+    electron.velocity.x = d_electrons[i].velocity.x;
+    electron.velocity.y = d_electrons[i].velocity.y;
+    electron.velocity.z = d_electrons[i].velocity.z;
+    electron.position.x = d_electrons[i].position.x;
+    electron.position.y = d_electrons[i].position.y;
+    electron.position.z = d_electrons[i].position.z;
+
+    for(int t = start_t; t <= max_t; t++){
+        updateParticle(&electron, d_electrons, deltaTime, n, capacity, t);
+    }
+
+    d_electrons[i].timestamp = electron.timestamp;
+    d_electrons[i].weight = electron.weight;
+    d_electrons[i].velocity.x = electron.velocity.x;
+    d_electrons[i].velocity.y = electron.velocity.y;
+    d_electrons[i].velocity.z = electron.velocity.z;
+    d_electrons[i].position.x = electron.position.x;
+    d_electrons[i].position.y = electron.position.y;
+    d_electrons[i].position.z = electron.position.z;
+}
+
 // // Kernel for random numbers
 // __global__ void setup_kernel() {
 //     int idx = threadIdx.x+blockDim.x*blockIdx.x;
@@ -96,9 +126,7 @@ __global__ static void cpuSynch(Electron* d_electrons, float deltaTime, int* n, 
 
     // The thread index has passed the number of d_electrons. Thread returns if all electron are being handled
     if (i >= start_n) return;
-    for(int t = max(1, d_electrons[i].timestamp + 1); t <= max_t; t++){
-        simulate(d_electrons, deltaTime, n, capacity, i, t);
-    }
+    simulateMany(d_electrons, deltaTime, n, capacity, i, max(1, d_electrons[i].timestamp + 1), max_t);
 }
 
 __global__ static void staticGpu(Electron* d_electrons, float deltaTime, int* n, int capacity, int max_t, int sleep_time_ns, int* n_done) {
@@ -117,10 +145,7 @@ __global__ static void staticGpu(Electron* d_electrons, float deltaTime, int* n,
             __nanosleep(sleep_time_ns);
         }
 
-        for(int t=max(1,d_electrons[i].timestamp+1); t<=max_t; t++) { //update particle from next time iteration
-            simulate(d_electrons, deltaTime, n, capacity, i, t);
-        }
-        // __threadfence(); // is it needed here?
+        simulateMany(d_electrons, deltaTime, n, capacity, i, max(1, d_electrons[i].timestamp + 1), max_t);
         atomicAdd(n_done,1);
     }
 
@@ -147,11 +172,7 @@ __global__ static void dynamicGpu(Electron* d_electrons, float deltaTime, int* n
             __nanosleep(sleep_time_ns);
         }
 
-        for (int t=max(1,d_electrons[i].timestamp+1); t<=max_t; t++) { //update particle from next time iteration
-            simulate(d_electrons, deltaTime, n, capacity, i, t);
-        }
-
-        // __threadfence(); // is it needed here?
+        simulateMany(d_electrons, deltaTime, n, capacity, i, max(1, d_electrons[i].timestamp + 1), max_t);
         atomicAdd(n_done,1);
 
     }

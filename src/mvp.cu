@@ -12,6 +12,9 @@
 __shared__ int i_block;
 __shared__ int capacity;
 
+__shared__ int n_block;
+__shared__ int new_i_block;
+
 __device__ static void updateParticle(Electron* electron, Electron* new_electrons, float deltaTime, int* n, int capacity, int t){
 
     // float myrandf = curand_uniform(d_rand_state+i);
@@ -77,8 +80,8 @@ __device__ static void updateParticle(Electron* electron, Electron* new_electron
     }
 }
 
-__device__ static void simulate(Electron* d_electrons, float deltaTime, int* n, int capacity, int i, int t){
-    updateParticle(&d_electrons[i], d_electrons, deltaTime, n, capacity, t);
+__device__ static void simulateNaive(Electron* d_electrons, Electron* new_electrons, float deltaTime, int* n, int capacity, int i, int t){
+    updateParticle(&d_electrons[i], new_electrons, deltaTime, n, capacity, t);
 }
 
 __device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, int i, int start_t, int max_t){
@@ -98,12 +101,32 @@ __device__ static void simulateMany(Electron* d_electrons, float deltaTime, int*
 // }
 
 __global__ static void naive(Electron* d_electrons, float deltaTime, int* n, int start_n, int capacity, int t) {
+    __shared__ char sharedMemory[sizeof(Electron) * 1024]; // Allocate raw shared memory
+    Electron* new_particles_block = reinterpret_cast<Electron*>(sharedMemory);
+
     int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (threadIdx.x == 0) n_block = 0;
+
+    __syncthreads(); // Ensure construction is finished
     
     // The thread index has passed the number of d_electrons. Thread returns if all electron are being handled
     if (i >= start_n) return;
 
-    simulate(d_electrons, deltaTime, n, capacity, i, t);
+    simulateNaive(d_electrons, new_particles_block, deltaTime, &n_block, capacity, i, t);
+
+    __syncthreads();
+
+    if (threadIdx.x == 0){
+        new_i_block = atomicAdd(n, n_block);
+    }
+
+    __syncthreads();
+
+    if (threadIdx.x >= n_block) return;
+    int global_i = new_i_block + threadIdx.x;
+    if (global_i >= capacity) return;
+    d_electrons[global_i] = new_particles_block[threadIdx.x];
 }
 
 __global__ static void cpuSynch(Electron* d_electrons, float deltaTime, int* n, int start_n, int offset, int capacity, int max_t) {

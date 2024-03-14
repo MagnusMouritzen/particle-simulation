@@ -85,10 +85,36 @@ __device__ static void simulateNaive(Electron* d_electrons, Electron* new_electr
 }
 
 __device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, int i, int start_t, int max_t){
+    __shared__ char sharedMemory[sizeof(Electron) * 1024]; // Allocate raw shared memory
+    Electron* new_particles_block = reinterpret_cast<Electron*>(sharedMemory);
+
     Electron electron = d_electrons[i];
 
+    if (threadIdx.x == 0) n_block = 0;
+    __syncthreads();
+
+
     for(int t = start_t; t <= max_t; t++){
-        updateParticle(&electron, d_electrons, deltaTime, n, capacity, t);
+        updateParticle(&electron, new_particles_block, deltaTime, &n_block, capacity, t);
+        __syncthreads();
+        if (n_block == 0) continue;
+
+        if (threadIdx.x == 0){
+            new_i_block = atomicAdd(n, n_block);
+        }
+
+        __syncthreads();
+
+        if (threadIdx.x < n_block){
+            int global_i = new_i_block + threadIdx.x;
+            if (global_i < capacity){
+                d_electrons[global_i] = new_particles_block[threadIdx.x];
+            }
+        }
+
+        __syncthreads();
+        if (threadIdx.x == 0) n_block = 0;
+        __syncthreads();
     }
 
     d_electrons[i] = electron;

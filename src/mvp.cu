@@ -118,7 +118,8 @@ __global__ static void naive(Electron* d_electrons, float deltaTime, int* n, int
     __syncthreads();
 
     if (threadIdx.x == 0){
-        new_i_block = atomicAdd(n, n_block);
+        if (*n < capacity) new_i_block = atomicAdd(n, n_block);  // Avoid risk of n overflowing int max value
+        else new_i_block = capacity;
     }
 
     __syncthreads();

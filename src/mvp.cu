@@ -161,6 +161,10 @@ __global__ static void staticGpu(Electron* d_electrons, float deltaTime, int* n,
         n_done_local++;
     }
 
+    if (n_done_local != 0){
+        atomicAdd(n_done, n_done_local);
+    }
+
 }
 
 __global__ static void dynamicGpu(Electron* d_electrons, float deltaTime, int* n, int capacity, int max_t, int sleep_time_ns, int* n_done, int* i_global) {

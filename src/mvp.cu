@@ -157,11 +157,15 @@ __global__ static void staticGpu(Electron* d_electrons, float deltaTime, int* n,
     int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
     int num_blocks = gridDim.x;
     int block_size = blockDim.x;
-
+    int n_done_local = 0;
 
     for (int i = thread_id; i < capacity; i += num_blocks * block_size) {
 
         while(d_electrons[i].timestamp == 0) {
+            if (n_done_local != 0){
+                atomicAdd(n_done, n_done_local);
+                n_done_local = 0;
+            }
             int cur_n_done = *n_done;
             __threadfence();
             int cur_n = *n;
@@ -170,7 +174,7 @@ __global__ static void staticGpu(Electron* d_electrons, float deltaTime, int* n,
         }
 
         simulateMany(d_electrons, deltaTime, n, capacity, i, max(1, d_electrons[i].timestamp + 1), max_t);
-        atomicAdd(n_done,1);
+        n_done_local++;
     }
 
 }

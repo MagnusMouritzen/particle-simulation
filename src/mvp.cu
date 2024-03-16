@@ -10,11 +10,12 @@
 // __device__ curandState *d_rand_state;
 
 __shared__ int i_block;
+__shared__ int capacity;
 
 __shared__ int n_block;
 __shared__ int new_i_block;
 
-__device__ static void updateParticle(Electron* electron, Electron* new_electrons, float deltaTime, int* n, int t){
+__device__ static void updateParticle(Electron* electron, Electron* new_electrons, float deltaTime, int* n, int capacity, int t){
 
     // float myrandf = curand_uniform(d_rand_state+i);
     // float min = 5;
@@ -33,30 +34,32 @@ __device__ static void updateParticle(Electron* electron, Electron* new_electron
         electron->position.y = -electron->position.y;
         electron->velocity.y = -electron->velocity.y;
 
-        int new_i = atomicAdd(n, 1);
-
-        if (electron->velocity.x >= 0){
-            electron->velocity.x += 10;
-        }
-        else{
-            electron->velocity.x -= 10;
-        }
-
-        //printf("Particle %d spawns particle %d\n", i, new_i);
-        new_electrons[new_i].position.y = electron->position.y;
-        new_electrons[new_i].velocity.y = electron->velocity.y;
-        if (electron->velocity.x >= 0){
-            new_electrons[new_i].velocity.x = electron->velocity.x - 20;
-        }
-        else{
-            new_electrons[new_i].velocity.x = electron->velocity.x + 20;
-        }
-        new_electrons[new_i].position.x = electron->position.x + new_electrons[new_i].velocity.x * deltaTime;
-        new_electrons[new_i].weight = electron->weight;
-        __threadfence();
-        new_electrons[new_i].timestamp = t;
+        if (*n < capacity) {
+            int new_i = atomicAdd(n, 1);
         
-        
+            if (new_i < capacity){
+                if (electron->velocity.x >= 0){
+                    electron->velocity.x += 10;
+                }
+                else{
+                    electron->velocity.x -= 10;
+                }
+
+                //printf("Particle %d spawns particle %d\n", i, new_i);
+                new_electrons[new_i].position.y = electron->position.y;
+                new_electrons[new_i].velocity.y = electron->velocity.y;
+                if (electron->velocity.x >= 0){
+                    new_electrons[new_i].velocity.x = electron->velocity.x - 20;
+                }
+                else{
+                    new_electrons[new_i].velocity.x = electron->velocity.x + 20;
+                }
+                new_electrons[new_i].position.x = electron->position.x + new_electrons[new_i].velocity.x * deltaTime;
+                new_electrons[new_i].weight = electron->weight;
+                __threadfence();
+                new_electrons[new_i].timestamp = t;
+            }
+        }
     }
     else if (electron->position.y >= 500){
         electron->position.y = 500 - (electron->position.y - 500);
@@ -77,35 +80,17 @@ __device__ static void updateParticle(Electron* electron, Electron* new_electron
     }
 }
 
-__device__ static void simulateNaive(Electron* d_electrons, Electron* new_electrons, float deltaTime, int* n, int i, int t){
-    updateParticle(&d_electrons[i], new_electrons, deltaTime, n, t);
+__device__ static void simulateNaive(Electron* d_electrons, Electron* new_electrons, float deltaTime, int* n, int capacity, int i, int t){
+    updateParticle(&d_electrons[i], new_electrons, deltaTime, n, capacity, t);
 }
 
 __device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, int i, int start_t, int max_t){
     Electron electron = d_electrons[i];
 
-    Electron new_electrons[2];
-    int* new_electrons_counter = new int;
-    *new_electrons_counter=0;
-    
     for(int t = start_t; t <= max_t; t++){
-        updateParticle(&electron, new_electrons, deltaTime, new_electrons_counter, t);
-        if (*new_electrons_counter >= 2 || t == max_t) {
-            if(*n > capacity) {
-                *new_electrons_counter = 0; 
-                continue;
-            }
-            
-            int i_global = atomicAdd(n, *new_electrons_counter);
-            // printf("%d \n", i_global);
-            int j = 0;
-            while(*new_electrons_counter != 0 && i_global+j < capacity) {
-                d_electrons[i_global+j] = new_electrons[j];
-                j += 1;
-                *new_electrons_counter -= 1;
-            }
-        }
+        updateParticle(&electron, d_electrons, deltaTime, n, capacity, t);
     }
+
     d_electrons[i] = electron;
 }
 
@@ -128,12 +113,11 @@ __global__ static void naive(Electron* d_electrons, float deltaTime, int* n, int
     // The thread index has passed the number of d_electrons. Thread returns if all electron are being handled
     if (i >= start_n) return;
 
-    simulateNaive(d_electrons, new_particles_block, deltaTime, &n_block, i, t);
+    simulateNaive(d_electrons, new_particles_block, deltaTime, &n_block, capacity, i, t);
 
     __syncthreads();
 
     if (threadIdx.x == 0){
-        if(*n > capacity) return;
         new_i_block = atomicAdd(n, n_block);
     }
 

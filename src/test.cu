@@ -11,16 +11,19 @@ void runBenchmark(){
     int max_ns[] = {10000000};
     int functions[] = {0,1,2,3};
     int sleep_times[] = {100};
+    float split_chances[] = {1};
 
     for(int init_n : init_ns){
         for(int block_size : block_sizes){
             for(int max_t : max_ts){
                 for(int max_n : max_ns){
                     for(int sleep_time : sleep_times){
-                        for(int function : functions){
-                            RunData run_data = runMVP(init_n, max_n, max_t, function, 0, block_size, sleep_time, 0.01);
-                            data.push_back(run_data.timing_data);
-                            free(run_data.electrons);
+                        for(float split_chance : split_chances){
+                            for(int function : functions){
+                                RunData run_data = runMVP(init_n, max_n, max_t, function, 0, block_size, sleep_time, 0.01, split_chance);
+                                data.push_back(run_data.timing_data);
+                                free(run_data.electrons);
+                            }
                         }
                     }
                 }
@@ -30,7 +33,7 @@ void runBenchmark(){
     printCSV(data, "out/data.csv");
 }
 
-void runUnitTest(int init_n, int max_n, int max_t, int verbose, int block_size, int sleep_time){
+void runUnitTest(int init_n, int max_n, int max_t, int verbose, int block_size, int sleep_time, float split_chance){
     // How I ran it:
     // run test 0 1 200 256 10000000 100
     int base_function = 0;
@@ -40,7 +43,7 @@ void runUnitTest(int init_n, int max_n, int max_t, int verbose, int block_size, 
     bool broken[amnt];
     int final_ns[amnt];
 
-    RunData base_run_data = runMVP(init_n, max_n, max_t, base_function, 0, block_size, sleep_time, 0.01);
+    RunData base_run_data = runMVP(init_n, max_n, max_t, base_function, 0, block_size, sleep_time, 0.01, split_chance);
     Electron* base_electrons = base_run_data.electrons;
     int base_final_n = base_run_data.final_n;
     printf("Sorting base...\n");
@@ -50,7 +53,7 @@ void runUnitTest(int init_n, int max_n, int max_t, int verbose, int block_size, 
     for(int fi = 0; fi < amnt; fi++){
         int function = test_functions[fi];
         broken[fi] = false;
-        RunData run_data = runMVP(init_n, max_n, max_t, function, 0, block_size, sleep_time, 0.01);
+        RunData run_data = runMVP(init_n, max_n, max_t, function, 0, block_size, sleep_time, 0.01, split_chance);
         Electron* electrons = run_data.electrons;
         int final_n = run_data.final_n;
         final_ns[fi] = final_n;

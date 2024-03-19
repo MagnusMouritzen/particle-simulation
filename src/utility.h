@@ -14,21 +14,21 @@ struct Electron {
         float3 position;
         float weight;
         float3 velocity;
-        int timestamp = numeric_limits<int>::max();
+        int timestamp;
 
-        void print(){
+        __host__ void print(){
             printf("(%.6f, %.6f) (%.6f, %.6f) (%.6f) [%d]\n", position.x, position.y, velocity.x, velocity.y, weight, timestamp);
         }
 
-        void print(int i){
+        __host__ void print(int i){
             printf("%d: (%.6f, %.6f) (%.6f, %.6f) (%.6f) [%d]\n", i, position.x, position.y, velocity.x, velocity.y, weight, timestamp);
         }
 
-        tuple<int, float, float, float, float, float, float, float> getKey() const {
+        __host__ tuple<int, float, float, float, float, float, float, float> getKey() const {
             return make_tuple(timestamp, weight, position.y, position.x, position.z, velocity.y, velocity.x, velocity.z);
         }
 
-        bool operator<(const Electron& other){
+        __host__ bool operator<(const Electron& other){
             /*if (timestamp != other.timestamp) return timestamp < other.timestamp;
             if (weight != other.weight) return weight < other.weight;
             if (position.y != other.position.y) return position.y < other.position.y;
@@ -41,7 +41,7 @@ struct Electron {
             return getKey() < other.getKey();
         }
 
-        bool operator==(const Electron& other){
+        __host__ bool operator==(const Electron& other){
             return getKey() == other.getKey();
             return timestamp == other.timestamp &&
             weight == other.weight &&
@@ -53,7 +53,7 @@ struct Electron {
             velocity.z == other.velocity.z;
         }
 
-        bool operator!=(const Electron& other) {
+        __host__ bool operator!=(const Electron& other) {
             return !(*this == other);
         }
 };

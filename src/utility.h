@@ -18,15 +18,15 @@ struct Electron {
         int timestamp;
 
         __host__ void print(){
-            printf("(%.6f, %.6f) (%.6f, %.6f) (%.6f) [%d] {%d}\n", position.x, position.y, velocity.x, velocity.y, weight, timestamp, creator);
+            printf("(%.6f, %.6f) (%.6f, %.6f) (%.6f) [%d]\n", position.x, position.y, velocity.x, velocity.y, weight, timestamp);
         }
 
         __host__ void print(int i){
-            printf("%d: (%.6f, %.6f) (%.6f, %.6f) (%.6f) [%d] {%d}\n", i, position.x, position.y, velocity.x, velocity.y, weight, timestamp, creator);
+            printf("%d: (%.6f, %.6f) (%.6f, %.6f) (%.6f) [%d]\n", i, position.x, position.y, velocity.x, velocity.y, weight, timestamp);
         }
 
-        __host__ tuple<int, int, float, float, float, float, float, float, float> getKey() const {
-            return make_tuple(creator, timestamp, weight, position.y, position.x, position.z, velocity.y, velocity.x, velocity.z);
+        __host__ tuple<int, float, float, float, float, float, float, float> getKey() const {
+            return make_tuple(timestamp, weight, position.y, position.x, position.z, velocity.y, velocity.x, velocity.z);
         }
 
         __host__ bool operator<(const Electron& other){

@@ -5,13 +5,13 @@ using namespace std;
 
 void runBenchmark(){
     vector<TimingData> data;
-    int init_ns[] = {100000};
-    int block_sizes[] = {512};
+    int init_ns[] = {1000};
+    int block_sizes[] = {256};
     int max_ts[] = {10000};
     int max_ns[] = {10000000};
     int functions[] = {0,1,2,3};
     int sleep_times[] = {100};
-    float split_chances[] = {1};
+    float split_chances[] = {0.05};
 
     for(int init_n : init_ns){
         for(int block_size : block_sizes){

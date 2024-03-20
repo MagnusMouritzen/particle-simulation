@@ -13,6 +13,7 @@ struct Electron {
     public:
         float3 position;
         float weight;
+        int creator;
         float3 velocity;
         int timestamp;
 
@@ -42,15 +43,15 @@ struct Electron {
         }
 
         __host__ bool operator==(const Electron& other){
-            return getKey() == other.getKey();
+            // return getKey() == other.getKey();
             return timestamp == other.timestamp &&
-            weight == other.weight &&
-            position.x == other.position.x &&
-            position.y == other.position.y &&
-            position.z == other.position.z &&
-            velocity.x == other.velocity.x &&
-            velocity.y == other.velocity.y &&
-            velocity.z == other.velocity.z;
+            abs(weight - other.weight) < 0.00001 &&
+            abs(position.x - other.position.x) < 0.00001 &&
+            abs(position.y - other.position.y) < 0.00001 &&
+            abs(position.z - other.position.z) < 0.00001 &&
+            abs(velocity.x - other.velocity.x) < 0.00001 &&
+            abs(velocity.y - other.velocity.y) < 0.00001 &&
+            abs(velocity.z - other.velocity.z) < 0.00001;
         }
 
         __host__ bool operator!=(const Electron& other) {

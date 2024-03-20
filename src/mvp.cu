@@ -16,7 +16,7 @@ __shared__ int n_block;
 __shared__ int new_i_block;
 
 __device__ void newRandState(curandState* d_rand_states, int i, int seed){
-    printf("New rand state for %d seed %d\n", i, seed);
+    // printf("New rand state for %d seed %d\n", i, seed);
     curand_init(1234, seed, 0, &d_rand_states[i]);
 }
 
@@ -42,19 +42,20 @@ __global__ void setup(Electron* d_electrons, curandState* d_rand_states, int ini
     d_electrons[i].timestamp = -1;
 }
 
-__device__ static void updateParticle(Electron* electron, Electron* new_electrons, float deltaTime, int* n, int capacity, float split_chance, curandState* d_rand_states, int i, int t){
+__device__ static int updateParticle(Electron* electron, Electron* new_electrons, float deltaTime, int* n, int capacity, float split_chance, curandState* d_rand_states, int i, int t){
     electron->velocity.y -= 9.82 * deltaTime * electron->weight;
     electron->position.y += electron->velocity.y * deltaTime;
 
+    int new_i = -1;
     float rand = randFloat(&d_rand_states[i], 0, 100);
-    printf("%d: %.02f\n", i, rand);
+    // printf("%d: %.02f\n", i, rand);
     if (rand < split_chance) {
         if (*n < capacity) {
-            int new_i = atomicAdd(n, 1);
+            // printf("n %d\n", *n);
+            new_i = atomicAdd(n, 1);
         
             if (new_i < capacity){
-                printf("Spawn from %d to %d\n", i, new_i);
-                newRandState(d_rand_states, new_i, randInt(&d_rand_states[i], 0, 10000));
+
                 if (electron->velocity.x >= 0){
                     electron->velocity.x += 10;
                 }
@@ -62,7 +63,7 @@ __device__ static void updateParticle(Electron* electron, Electron* new_electron
                     electron->velocity.x -= 10;
                 }
 
-                //printf("Particle %d spawns particle %d\n", i, new_i);
+                
                 new_electrons[new_i].position.y = electron->position.y;
                 new_electrons[new_i].velocity.y = electron->velocity.y;
                 if (electron->velocity.x >= 0){
@@ -72,7 +73,10 @@ __device__ static void updateParticle(Electron* electron, Electron* new_electron
                     new_electrons[new_i].velocity.x = electron->velocity.x + 20;
                 }
                 new_electrons[new_i].position.x = electron->position.x + new_electrons[new_i].velocity.x * deltaTime;
+                new_electrons[new_i].position.z = 1.0;
+                new_electrons[new_i].velocity.z = 1.0;
                 new_electrons[new_i].weight = electron->weight;
+                new_electrons[new_i].creator = i;
                 __threadfence();
                 new_electrons[new_i].timestamp = t;
             }
@@ -100,6 +104,7 @@ __device__ static void updateParticle(Electron* electron, Electron* new_electron
         electron->velocity.x = -electron->velocity.x;
         electron->weight *= -1;
     }
+    return new_i;
 }
 
 __device__ static void simulateNaive(Electron* d_electrons, Electron* new_electrons, float deltaTime, int* n, int capacity, float split_chance, curandState* d_rand_states, int i, int t){
@@ -110,9 +115,12 @@ __device__ static void simulateMany(Electron* d_electrons, float deltaTime, int*
     Electron electron = d_electrons[i];
 
     for(int t = start_t; t <= max_t; t++){
-        updateParticle(&electron, d_electrons, deltaTime, n, capacity, split_chance, d_rand_states, i, t);
+        int new_i = updateParticle(&electron, d_electrons, deltaTime, n, capacity, split_chance, d_rand_states, i, t);
+        if(new_i != -1) {
+            printf("Particle %d spawns particle %d\n", i, new_i);
+            newRandState(d_rand_states, new_i, randInt(&d_rand_states[i], 0, 10000));
+        }
     }
-
     d_electrons[i] = electron;
 }
 
@@ -144,6 +152,7 @@ __global__ static void naive(Electron* d_electrons, float deltaTime, int* n, int
     if (threadIdx.x >= n_block) return;
     int global_i = new_i_block + threadIdx.x;
     if (global_i >= capacity) return;
+    newRandState(d_rand_states, global_i, randInt(&d_rand_states[new_particles_block[threadIdx.x].creator], 0, 10000));
     d_electrons[global_i] = new_particles_block[threadIdx.x];
 }
 

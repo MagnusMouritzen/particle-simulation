@@ -127,8 +127,7 @@ __device__ static void simulateMany(Electron* d_electrons, float deltaTime, int*
 }
 
 __global__ static void naive(Electron* d_electrons, float deltaTime, int* n, int start_n, int capacity, float split_chance, curandState* d_rand_states, int t) {
-
-    __shared__ Electron new_particles_block[1024];
+    extern __shared__ Electron new_particles_block[];
 
     int i = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -290,13 +289,14 @@ RunData runMVP (int init_n, int capacity, int max_t, int mode, int verbose, int 
     switch(mode){
         case 0: { //Naive      
             timing_data.function = "Naive";
+            const int shared_mem_size = block_size * sizeof(Electron);
             cudaEventRecord(start);
             for (int t = 1; t <= max_t; t++){
                 int start_n;
                 if (simulate_new_particles) start_n = min(*n_host, capacity);
                 else start_n = init_n;
                 int num_blocks = (start_n + block_size - 1) / block_size;
-                naive<<<num_blocks, block_size>>>(d_electrons, delta_time, inc_n, start_n, capacity, split_chance, d_rand_states, t);
+                naive<<<num_blocks, block_size, shared_mem_size>>>(d_electrons, delta_time, inc_n, start_n, capacity, split_chance, d_rand_states, t);
                 log(verbose, t, h_electrons, d_electrons, n_host, inc_n, capacity);
                 cudaMemcpy(n_host, inc_n, sizeof(int), cudaMemcpyDeviceToHost);
             }

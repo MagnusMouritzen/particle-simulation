@@ -1,17 +1,18 @@
 #include <algorithm>
+#include <stdexcept>
 #include "mvp.h"
 #include "test.h"
 using namespace std;
 
 void runBenchmark(){
     vector<TimingData> data;
-    int init_ns[] = {1000};
-    int block_sizes[] = {256};
-    int max_ts[] = {10000};
-    int max_ns[] = {10000000};
+    int init_ns[] = {1000, 10000, 100000, 1000000, 10000000};
+    int block_sizes[] = {128, 512, 1024};
+    int max_ts[] = {10, 100, 1000, 10000};
+    int max_ns[] = {100000000};
     int functions[] = {0,1,2,3};
     int sleep_times[] = {100};
-    float split_chances[] = {0.05};
+    float split_chances[] = {0.05, 0.1, 1, 10};
 
     for(int init_n : init_ns){
         for(int block_size : block_sizes){
@@ -20,7 +21,16 @@ void runBenchmark(){
                     for(int sleep_time : sleep_times){
                         for(float split_chance : split_chances){
                             for(int function : functions){
+                                if ((init_n * max_t / 100) * split_chance + init_n >= max_n) {
+                                    printf("Skip %d %d %.6f %d\n", init_n, max_t, split_chance, max_n);
+                                    continue;
+                                }
                                 RunData run_data = runMVP(init_n, max_n, max_t, function, 0, block_size, sleep_time, 0.01, split_chance, false);
+                                if (run_data.final_n >= max_n) {
+                                    //throw runtime_error("Illegal configuration, capacity reached!");
+                                    printf("\n\n\nIllegal!!!\n\n\n");
+                                    continue;
+                                }
                                 data.push_back(run_data.timing_data);
                                 free(run_data.electrons);
                             }

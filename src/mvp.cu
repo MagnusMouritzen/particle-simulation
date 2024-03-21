@@ -127,7 +127,7 @@ __device__ static void simulateMany(Electron* d_electrons, float deltaTime, int*
 
 __global__ static void naive(Electron* d_electrons, float deltaTime, int* n, int start_n, int capacity, float split_chance, curandState* d_rand_states, int t) {
 
-    __shared__ Electron new_particles_block[1024];
+    extern __shared__ Electron  new_particles_block[];
 
     int i = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -251,6 +251,8 @@ RunData runMVP (int init_n, int capacity, int max_t, int mode, int verbose, int 
     timing_data.iterations = max_t;
     timing_data.block_size = block_size;
     timing_data.sleep_time = sleep_time_ns;
+    timing_data.split_chance = split_chance;
+    
 
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
@@ -279,13 +281,15 @@ RunData runMVP (int init_n, int capacity, int max_t, int mode, int verbose, int 
     cudaMalloc(&i_global, sizeof(int));
     cudaMemset(i_global, 0, sizeof(int));
 
+
     switch(mode){
         case 0: { //Naive      
             timing_data.function = "Naive";
+            const int sharedMemSize = block_size * sizeof(Electron);
             cudaEventRecord(start);
             for (int t = 1; t <= max_t; t++){
                 int num_blocks = (min(*n_host, capacity) + block_size - 1) / block_size;
-                naive<<<num_blocks, block_size>>>(d_electrons, delta_time, n, min(*n_host, capacity), capacity, split_chance, d_rand_states, t);
+                naive<<<num_blocks, block_size, sharedMemSize>>>(d_electrons, delta_time, n, min(*n_host, capacity), capacity, split_chance, d_rand_states, t);
                 log(verbose, t, h_electrons, d_electrons, n_host, n, capacity);
                 cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
             }
@@ -347,6 +351,7 @@ RunData runMVP (int init_n, int capacity, int max_t, int mode, int verbose, int 
     printf("Final amount of particles: %d\n", min(*n_host, capacity));
     printf("GPU time of program: %f ms\n", runtime_ms);
     timing_data.time = runtime_ms;
+    timing_data.final_n = min(*n_host, capacity);
 
     RunData run_data;
     run_data.timing_data = timing_data;

@@ -65,6 +65,8 @@ struct TimingData{
     int iterations;
     int block_size;
     int sleep_time;
+    float split_chance;
+    int final_n;
     string function;
 };
 

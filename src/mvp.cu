@@ -251,6 +251,7 @@ RunData runMVP (int init_n, int capacity, int max_t, int mode, int verbose, int 
     timing_data.iterations = max_t;
     timing_data.block_size = block_size;
     timing_data.sleep_time = sleep_time_ns;
+    timing_data.split_chance = split_chance;
 
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
@@ -359,12 +360,14 @@ RunData runMVP (int init_n, int capacity, int max_t, int mode, int verbose, int 
     printf("Final amount of particles: %d\n", min(*n_host, capacity));
     printf("GPU time of program: %f ms\n", runtime_ms);
     timing_data.time = runtime_ms;
+    timing_data.final_n = min(*n_host, capacity);
 
     RunData run_data;
     run_data.timing_data = timing_data;
     run_data.final_n = min(*n_host, capacity);
     run_data.electrons = new Electron[capacity];
     memcpy(run_data.electrons, h_electrons, capacity * sizeof(Electron));
+
 
     free(n_host);
     free(h_electrons);

@@ -4,17 +4,18 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 print("Hello There!")
+print("General Kenobi!")
 
 # Get all files in 'out' folder that start with 'data' and end with '.csv'
 import os
-files = os.listdir('out')
-files = [f for f in files if f.startswith('data_max_t_no') and f.endswith('.csv')]
+files = os.listdir('out/data')
+files = [f for f in files if f.startswith('data_max_t_yes') and f.endswith('.csv')]
 
 # Print the files
 print(files)
 
 # Read all files into a single dataframe
-df = pd.concat([pd.read_csv('out/' + f) for f in files])
+df = pd.concat([pd.read_csv('out/data/' + f) for f in files])
 
 # Remove rows with NaN values
 df = df.dropna()
@@ -86,4 +87,4 @@ plt.minorticks_on()
 # plt.show()
 
 # Save the plot to a file
-plt.savefig('out/plot.png', bbox_inches='tight')
+plt.savefig('out/data/plot.png', bbox_inches='tight')

@@ -16,6 +16,7 @@ struct Electron {
         int creator;
         float3 velocity;
         int timestamp;
+        bool live;
 
         __host__ void print(){
             printf("(%.6f, %.6f) (%.6f, %.6f) (%.6f) [%d]\n", position.x, position.y, velocity.x, velocity.y, weight, timestamp);

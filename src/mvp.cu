@@ -149,14 +149,17 @@ __global__ static void naive(Electron* d_electrons, float deltaTime, int* n, int
 
     int i = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (threadIdx.x == 0) n_block = 0;
+    if (threadIdx.x == 0) {
+        n_block = 0;
+        printf("%d: double %d, flip %d\n", i, double_index, double_index_flip);
+    }
 
     __syncthreads(); // Ensure construction is finished
     
     // The thread index has passed the number of d_electrons. Thread returns if all electron are being handled
-    if (i >= start_n) return;
-
-    simulateNaive(&d_electrons[double_index], new_particles_block, deltaTime, &n_block, capacity, split_chance, remove_chance, &d_rand_states[double_index], i, t);
+    if (i < start_n) {
+        simulateNaive(&d_electrons[double_index], new_particles_block, deltaTime, &n_block, capacity, split_chance, remove_chance, &d_rand_states[double_index], i, t);
+    }
 
 
     __syncthreads();
@@ -347,8 +350,7 @@ RunData runMVP (int init_n, int capacity, int max_t, int mode, int verbose, int 
             int num_blocks;
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
             cudaEventRecord(start);
-            dynamicGpu<<<num_blocks, block_size>>>(d_electrons, delta_time, n, capacity, split_chance, remove_chance, d_rand_states, max_t, sleep_time_ns, n_done, i_global);
-            cudaEventRecord(stop);
+            dynamicGpu<<<num_blocks, block_size>>>(d_electrons, delta_time, n, capacity, split_chance, remove_chance, d_rand_states, max_t, sleep_time_ns, n_done, i_global);            cudaEventRecord(stop);
             break;
         }
         default:

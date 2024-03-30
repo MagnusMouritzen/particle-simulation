@@ -1,2 +1,2 @@
 #include "utility.h"
-RunData runMVP(int init_n, int capacity, int max_t, int mode, int verbose, int block_size, int sleep_time_ns, float delta_time, float split_chance);
+RunData runMVP(int init_n, int capacity, int max_t, int mode, int verbose, int block_size, int sleep_time_ns, float delta_time, float split_chance, float remove_chance);

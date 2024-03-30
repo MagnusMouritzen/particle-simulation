@@ -6,6 +6,7 @@
 #include "multiply_simulation.h"
 #include "test.h"
 #include "mvp.h"
+#include "pic.h"
 
 
 int main(int argc, char **argv) {
@@ -31,11 +32,6 @@ int main(int argc, char **argv) {
     else {
         int max_n = boost::lexical_cast<int>(argv[6]);
         int sleep_time = boost::lexical_cast<int>(argv[7]);
-        float split_chance = boost::lexical_cast<float>(argv[8]);
-
-        if (!strcmp(argv[1], "test")){ //Unit test
-            runUnitTest(init_n, max_n, max_t, verbose, block_size, sleep_time, split_chance);
-        }
 
         if (!strcmp(argv[1], "3")){ //Normal
             multiplyRun(init_n, max_n, max_t, 0, verbose, block_size, sleep_time, 0.1);
@@ -79,18 +75,36 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[1], "16")){ // Dynamic with blocks and block checks
             multiplyRun(init_n, max_n, max_t, 13, verbose, block_size, sleep_time, 0.1);
         }
-        //MVP
-        else if (!strcmp(argv[1], "20")){ // MVP Naive
-            runMVP(init_n, max_n, max_t, 0, verbose, block_size, sleep_time, 0.1, split_chance);
-        }
-        else if (!strcmp(argv[1], "21")){ // MVP CPU Sync
-            runMVP(init_n, max_n, max_t, 1, verbose, block_size, sleep_time, 0.1, split_chance);
-        }
-        else if (!strcmp(argv[1], "22")){ // MVP Static
-            runMVP(init_n, max_n, max_t, 2, verbose, block_size, sleep_time, 0.1, split_chance);
-        }
-        else if (!strcmp(argv[1], "23")){ // MVP Dynamic
-            runMVP(init_n, max_n, max_t, 3, verbose, block_size, sleep_time, 0.1, split_chance);
+        else{
+            float split_chance = boost::lexical_cast<float>(argv[8]);
+            // MVP
+            if (!strcmp(argv[1], "test")){ //Unit test
+                runUnitTest(init_n, max_n, max_t, verbose, block_size, sleep_time, split_chance);
+            }
+            else if (!strcmp(argv[1], "20")){ // MVP Naive
+                runMVP(init_n, max_n, max_t, 0, verbose, block_size, sleep_time, 0.1, split_chance);
+            }
+            else if (!strcmp(argv[1], "21")){ // MVP CPU Sync
+                runMVP(init_n, max_n, max_t, 1, verbose, block_size, sleep_time, 0.1, split_chance);
+            }
+            else if (!strcmp(argv[1], "22")){ // MVP Static
+                runMVP(init_n, max_n, max_t, 2, verbose, block_size, sleep_time, 0.1, split_chance);
+            }
+            else if (!strcmp(argv[1], "23")){ // MVP Dynamic
+                runMVP(init_n, max_n, max_t, 3, verbose, block_size, sleep_time, 0.1, split_chance);
+            }
+            // PIC
+            else if (!strcmp(argv[1], "23")){ // MVP Dynamic
+                runMVP(init_n, max_n, max_t, 3, verbose, block_size, sleep_time, 0.1, split_chance);
+            }
+            else{
+                float remove_chance = boost::lexical_cast<float>(argv[9]);
+                int poisson_timestep = boost::lexical_cast<int>(argv[10]);
+                // PIC
+                if (!strcmp(argv[1], "30")){ // PIC GOOD
+                    runPIC(init_n, max_n, max_t, poisson_timestep, 0, verbose, block_size, sleep_time, split_chance, remove_chance);
+                }
+            }
         }
     }
     double time = end_cpu_timer(start);

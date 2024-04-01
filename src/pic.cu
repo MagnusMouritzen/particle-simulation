@@ -165,6 +165,10 @@ __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, i
 __global__ static void remove_dead_particles(Electron* d_electrons_old, Electron* d_electrons_new, int* n, int start_n){
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= start_n) return;
+
+    if (threadIdx.x == 0) n_block = 0;
+    __syncthreads();
+
     int i_local = -1;
     if (d_electrons_old[i].timestamp != DEAD){
         i_local = atomicAdd(&n_block, 1);

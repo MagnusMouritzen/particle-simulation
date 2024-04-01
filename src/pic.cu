@@ -35,12 +35,13 @@ __device__ static int randInt(curandState* state, int min, int max){
     return (int)truncf(rand);
 }
 
-// Kernel for random numbers
-__global__ static void setup(Electron* d_electrons, curandState* d_rand_states, int init_n, int capacity) {
+__global__ static void setup_rand(curandState* d_rand_states) {
     int i = threadIdx.x+blockDim.x*blockIdx.x;
-    if (i >= capacity) return;
     newRandState(d_rand_states, i, i);
+}
 
+__global__ static void setup_particles(Electron* d_electrons, curandState* d_rand_states, int init_n) {
+    int i = threadIdx.x+blockDim.x*blockIdx.x;
     if (i >= init_n) return;
     d_electrons[i].position = make_float3(randFloat(&d_rand_states[i], 1, 499), randFloat(&d_rand_states[i], 1, 499), 1.0);
     d_electrons[i].weight = 1.0;
@@ -117,12 +118,11 @@ __device__ static int updateParticle(Electron* electron, Electron* new_electrons
 }
 
 
-__device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* d_rand_states, int i, int start_t, int poisson_timestep){
+__device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* rand_state, int i, int start_t, int poisson_timestep){
     Electron electron = d_electrons[i];
-    curandState rand_state = d_rand_states[i];
 
     for(int t = start_t; t <= poisson_timestep; t++){
-        int new_i = updateParticle(&electron, d_electrons, deltaTime, n, capacity, split_chance, remove_chance, &rand_state, i, t);
+        int new_i = updateParticle(&electron, d_electrons, deltaTime, n, capacity, split_chance, remove_chance, rand_state, i, t);
         if(new_i != -1 && new_i < capacity) {  // If a new particle was spawned and there is room for it.
             __threadfence();
             d_electrons[new_i].timestamp = t;
@@ -136,11 +136,10 @@ __device__ static void simulateMany(Electron* d_electrons, float deltaTime, int*
     if (electron.timestamp != DEAD) electron.timestamp = -1;
 
     d_electrons[i] = electron;
-    d_rand_states[i] = rand_state;
 }
 
 __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* d_rand_states, int poisson_timestep, int sleep_time_ns, int* n_done, int* i_global) {
-
+    int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
     while (true) {
         __syncthreads(); //sync threads seems to be able to handle threads being terminated
         if (threadIdx.x==0) {
@@ -160,7 +159,7 @@ __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, i
             __nanosleep(sleep_time_ns);
         }
 
-        simulateMany(d_electrons, deltaTime, n, capacity, split_chance, remove_chance, d_rand_states, i, max(1, d_electrons[i].timestamp + 1), poisson_timestep);
+        simulateMany(d_electrons, deltaTime, n, capacity, split_chance, remove_chance, &d_rand_states[thread_id], i, max(1, d_electrons[i].timestamp + 1), poisson_timestep);
         atomicAdd(n_done,1);
 
     }
@@ -208,6 +207,11 @@ static void log(int verbose, int t, Electron* electrons_host, Electron* electron
     }
 }
 
+__global__ void test_rng(curandState* states){
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    printf("%f\n", randFloat(&states[i], 0, 100));
+}
+
 RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timestep, int mode, int verbose, int block_size, int sleep_time_ns, float split_chance, float remove_chance) {
     printf("MVP with\ninit n: %d\ncapacity: %d\npoisson steps: %d\npoisson_timestep: %d\nblock size: %d\nsleep time: %d\nsplit chance: %f\nremove chance: %f\n", init_n, capacity, poisson_steps, poisson_timestep, block_size, sleep_time_ns, split_chance, remove_chance);
 
@@ -222,15 +226,19 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
+
+    int num_blocks_pers;
+    cudaDeviceGetAttribute(&num_blocks_pers, cudaDevAttrMultiProcessorCount, 0);
+
+    curandState* d_rand_states;
+    cudaMalloc(&d_rand_states, num_blocks_pers * block_size * sizeof(curandState));
+    setup_rand<<<num_blocks_pers, block_size>>>(d_rand_states);  // This has to be done before setup_particles
     
     Electron* h_electrons = (Electron *)calloc(capacity, sizeof(Electron));
     Electron* d_electrons;
     cudaMalloc(&d_electrons, 2 * capacity * sizeof(Electron));
     cudaMemset(d_electrons, 0, 2 * capacity * sizeof(Electron));
-
-    curandState* d_rand_states;
-    cudaMalloc(&d_rand_states, capacity * sizeof(curandState));
-    setup<<<(capacity + block_size - 1) / block_size, block_size>>>(d_electrons, d_rand_states, init_n, capacity);
+    setup_particles<<<(init_n + block_size - 1) / block_size, block_size>>>(d_electrons, d_rand_states, init_n);
 
     int* n_host = (int*)malloc(sizeof(int));
     int* n;
@@ -244,12 +252,21 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     int* i_global;
     cudaMalloc(&i_global, sizeof(int));
 
+    /// TEST
+    test_rng<<<num_blocks_pers, block_size>>>(d_rand_states);
+    cudaDeviceSynchronize();
+    cudaError_t error = cudaGetLastError();
+    if (error != cudaSuccess) {
+        printf("CUDA error: %s \n", cudaGetErrorString(error));
+        throw runtime_error(cudaGetErrorString(error));
+        // Handle error appropriately
+    }
+    RunData b;
+    return b;
 
     switch(mode){
         case 0: { // GOOD
             timing_data.function = "GOOD";
-            int num_blocks;
-            cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
             cudaEventRecord(start);
 
             int source_index = 0;
@@ -262,7 +279,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
                 log(verbose, t, h_electrons, &d_electrons[source_index], n_host, n, capacity);
                 cudaMemset(n_done, 0, sizeof(int));
                 cudaMemset(i_global, 0, sizeof(int));
-                poisson<<<num_blocks, block_size>>>(&d_electrons[source_index], 0.1, n, capacity, split_chance, remove_chance, d_rand_states, poisson_timestep, sleep_time_ns, n_done, i_global);
+                poisson<<<num_blocks_pers, block_size>>>(&d_electrons[source_index], 0.1, n, capacity, split_chance, remove_chance, d_rand_states, poisson_timestep, sleep_time_ns, n_done, i_global);
                 cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
                 cudaMemset(n, 0, sizeof(int));
                 int num_blocks_all = (min(*n_host, capacity) + block_size - 1) / block_size;
@@ -281,7 +298,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
         default:
             break;
     }
-    cudaError_t error = cudaGetLastError();
+    error = cudaGetLastError();
     if (error != cudaSuccess) {
         printf("CUDA error: %s \n", cudaGetErrorString(error));
         throw runtime_error(cudaGetErrorString(error));

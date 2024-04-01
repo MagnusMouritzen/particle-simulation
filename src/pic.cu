@@ -207,9 +207,10 @@ static void log(int verbose, int t, Electron* electrons_host, Electron* electron
     }
 }
 
-__global__ void test_rng(curandState* states){
+__global__ void test_rng(curandState* states, int max, int iter){
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    printf("%f\n", randFloat(&states[i], 0, 100));
+    if (i >= max) return;
+    for(int j = 0; j < iter; j++) printf("%f\n", randFloat(&states[i], 0, 100));
 }
 
 RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timestep, int mode, int verbose, int block_size, int sleep_time_ns, float split_chance, float remove_chance) {
@@ -253,7 +254,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     cudaMalloc(&i_global, sizeof(int));
 
     /// TEST
-    test_rng<<<num_blocks_pers, block_size>>>(d_rand_states);
+    test_rng<<<(100 + block_size - 1) / block_size, block_size>>>(d_rand_states, 100, 200);
     cudaDeviceSynchronize();
     cudaError_t error = cudaGetLastError();
     if (error != cudaSuccess) {

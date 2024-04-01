@@ -36,10 +36,12 @@ __device__ static int randInt(curandState* state, int min, int max){
 }
 
 // Kernel for random numbers
-__global__ static void setup(Electron* d_electrons, curandState* d_rand_states, int init_n) {
+__global__ static void setup(Electron* d_electrons, curandState* d_rand_states, int init_n, int capacity) {
     int i = threadIdx.x+blockDim.x*blockIdx.x;
-    if (i >= init_n) return;
+    if (i >= capacity) return;
     newRandState(d_rand_states, i, i);
+
+    if (i >= init_n) return;
     d_electrons[i].position = make_float3(randFloat(&d_rand_states[i], 1, 499), randFloat(&d_rand_states[i], 1, 499), 1.0);
     d_electrons[i].weight = 1.0;
     d_electrons[i].timestamp = -1;
@@ -115,14 +117,13 @@ __device__ static int updateParticle(Electron* electron, Electron* new_electrons
 }
 
 
-__device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* d_rand_states, int i, int start_t, int poisson_timestep, int n_rand_states){
+__device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* d_rand_states, int i, int start_t, int poisson_timestep){
     Electron electron = d_electrons[i];
     curandState rand_state = d_rand_states[i];
 
     for(int t = start_t; t <= poisson_timestep; t++){
         int new_i = updateParticle(&electron, d_electrons, deltaTime, n, capacity, split_chance, remove_chance, &rand_state, i, t);
         if(new_i != -1 && new_i < capacity) {  // If a new particle was spawned and there is room for it.
-            if (new_i >= n_rand_states) newRandState(d_rand_states, new_i, randInt(&rand_state, 0, 10000));
             __threadfence();
             d_electrons[new_i].timestamp = t;
             printf("%d: (%d) NEW %d {%f}\n", i, t, new_i, d_electrons[new_i].position.x);
@@ -138,7 +139,7 @@ __device__ static void simulateMany(Electron* d_electrons, float deltaTime, int*
     d_rand_states[i] = rand_state;
 }
 
-__global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* d_rand_states, int poisson_timestep, int sleep_time_ns, int* n_done, int* i_global, int n_rand_states) {
+__global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* d_rand_states, int poisson_timestep, int sleep_time_ns, int* n_done, int* i_global) {
 
     while (true) {
         __syncthreads(); //sync threads seems to be able to handle threads being terminated
@@ -159,7 +160,7 @@ __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, i
             __nanosleep(sleep_time_ns);
         }
 
-        simulateMany(d_electrons, deltaTime, n, capacity, split_chance, remove_chance, d_rand_states, i, max(1, d_electrons[i].timestamp + 1), poisson_timestep, n_rand_states);
+        simulateMany(d_electrons, deltaTime, n, capacity, split_chance, remove_chance, d_rand_states, i, max(1, d_electrons[i].timestamp + 1), poisson_timestep);
         atomicAdd(n_done,1);
 
     }
@@ -229,7 +230,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
 
     curandState* d_rand_states;
     cudaMalloc(&d_rand_states, capacity * sizeof(curandState));
-    setup<<<(init_n + block_size - 1) / block_size, block_size>>>(d_electrons, d_rand_states, init_n);
+    setup<<<(capacity + block_size - 1) / block_size, block_size>>>(d_electrons, d_rand_states, init_n, capacity);
 
     int* n_host = (int*)malloc(sizeof(int));
     int* n;
@@ -253,7 +254,6 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
 
             int source_index = 0;
             int destination_index = 0;
-            int n_rand_states = 0;
             for (int t = 0; t < poisson_steps; t++)
             {
                 source_index = (t % 2) * capacity;  // Flips between 0 and capacity.
@@ -262,9 +262,8 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
                 log(verbose, t, h_electrons, &d_electrons[source_index], n_host, n, capacity);
                 cudaMemset(n_done, 0, sizeof(int));
                 cudaMemset(i_global, 0, sizeof(int));
-                poisson<<<num_blocks, block_size>>>(&d_electrons[source_index], 0.1, n, capacity, split_chance, remove_chance, d_rand_states, poisson_timestep, sleep_time_ns, n_done, i_global, n_rand_states);
+                poisson<<<num_blocks, block_size>>>(&d_electrons[source_index], 0.1, n, capacity, split_chance, remove_chance, d_rand_states, poisson_timestep, sleep_time_ns, n_done, i_global);
                 cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
-                n_rand_states = max(*n_host, n_rand_states);
                 cudaMemset(n, 0, sizeof(int));
                 int num_blocks_all = (min(*n_host, capacity) + block_size - 1) / block_size;
                 if (*n_host == 0){

@@ -112,18 +112,20 @@ __device__ static int updateParticle(Electron* electron, Electron* new_electrons
 }
 
 
-__device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* d_rand_states, int i, int start_t, int poisson_steps){
+__device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* d_rand_states, int i, int start_t, int poisson_timestep){
     Electron electron = d_electrons[i];
     curandState rand_state = d_rand_states[i];
 
-    for(int t = start_t; t <= poisson_steps; t++){
+    for(int t = start_t; t <= poisson_timestep; t++){
         int new_i = updateParticle(&electron, d_electrons, deltaTime, n, capacity, split_chance, remove_chance, &rand_state, i, t);
         if(new_i != -1 && new_i < capacity) {  // If a new particle was spawned and there is room for it.
             newRandState(d_rand_states, new_i, randInt(&rand_state, 0, 10000));
             __threadfence();
             d_electrons[new_i].timestamp = t;
+            printf("%d: (%d) NEW %d {%f}", i, t, new_i, d_electrons[new_i].position.x);
         }
         else if (electron.timestamp == DEAD){  // If particle is to be removed.
+            printf("%d: (%d) DEAD\n", i, t);
             break;
         }
     }
@@ -167,6 +169,7 @@ __global__ static void remove_dead_particles(Electron* d_electrons_old, Electron
     if (d_electrons_old[i].timestamp != DEAD){
         i_local = atomicAdd(&n_block, 1);
     }
+    printf("%d: n %d, start n %d, i local %d\n", i, *n, start_n, i_local);
 
     __syncthreads();
     if (threadIdx.x == 0){
@@ -174,6 +177,8 @@ __global__ static void remove_dead_particles(Electron* d_electrons_old, Electron
     }
     __syncthreads();
     
+    printf("%d: i block %d\n", i, i_block);
+
     if (i_local == -1) return;
     d_electrons_new[i_block + i_local] = d_electrons_old[i];
 }
@@ -242,20 +247,28 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
             cudaEventRecord(start);
 
+            int source_index = 0;
+            int destination_index = 0;
             for (int t = 0; t < poisson_steps; t++)
             {
-                int source_index = (t % 2) * capacity;  // Flips between 0 and capacity.
-                int destination_index = ((t + 1) % 2) * capacity;  // Opposite of above.
+                printf("New time step %d\n", t);
+                source_index = (t % 2) * capacity;  // Flips between 0 and capacity.
+                destination_index = ((t + 1) % 2) * capacity;  // Opposite of above.
+                printf("%d: n %d, source %d, dest %d\n", t, *n_host, source_index, destination_index);
+
                 log(verbose, t, h_electrons, &d_electrons[source_index], n_host, n, capacity);
                 cudaMemset(n_done, 0, sizeof(int));
                 cudaMemset(i_global, 0, sizeof(int));
+                printf("Poisson\n");
                 poisson<<<num_blocks, block_size>>>(&d_electrons[source_index], 0.1, n, capacity, split_chance, remove_chance, d_rand_states, poisson_timestep, sleep_time_ns, n_done, i_global);
+                log(verbose, t, h_electrons, &d_electrons[source_index], n_host, n, capacity);
                 cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
                 cudaMemset(n, 0, sizeof(int));
                 int num_blocks_all = (min(*n_host, capacity) + block_size - 1) / block_size;
+                printf("Remove %d\n", num_blocks_all);
                 remove_dead_particles<<<num_blocks_all, block_size>>>(&d_electrons[source_index], &d_electrons[destination_index], n, min(*n_host, capacity));
             }
-            log(verbose, poisson_steps, h_electrons, d_electrons, n_host, n, capacity);
+            log(verbose, poisson_steps, h_electrons, &d_electrons[destination_index], n_host, n, capacity);
             
             
             cudaEventRecord(stop);

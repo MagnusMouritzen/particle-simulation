@@ -7,6 +7,8 @@
 #include <stdexcept>
 #include "mvp.h"
 
+#define DEAD -2
+
 // __device__ curandState *d_rand_state;
 
 __shared__ int i_block;
@@ -41,7 +43,7 @@ __global__ static void setup(Electron* d_electrons, curandState* d_rand_states, 
     d_electrons[i].timestamp = -1;
 }
 
-__device__ static int updateParticle(Electron* electron, Electron* new_electrons, float deltaTime, int* n, int capacity, float split_chance, curandState* rand_state, int i, int t){
+__device__ static int updateParticle(Electron* electron, Electron* new_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* rand_state, int i, int t){
     electron->velocity.y -= 9.82 * deltaTime * electron->weight;
     electron->position.y += electron->velocity.y * deltaTime;
 
@@ -80,6 +82,10 @@ __device__ static int updateParticle(Electron* electron, Electron* new_electrons
             }
         }
     }
+    else if (rand - split_chance < remove_chance){
+        electron->timestamp = DEAD;
+        return new_i;
+    }
 
     if (electron->position.y <= 0){
         electron->position.y = -electron->position.y;
@@ -106,24 +112,28 @@ __device__ static int updateParticle(Electron* electron, Electron* new_electrons
 }
 
 
-__device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, curandState* d_rand_states, int i, int start_t, int poisson_steps){
+__device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* d_rand_states, int i, int start_t, int poisson_steps){
     Electron electron = d_electrons[i];
     curandState rand_state = d_rand_states[i];
 
     for(int t = start_t; t <= poisson_steps; t++){
-        int new_i = updateParticle(&electron, d_electrons, deltaTime, n, capacity, split_chance, &rand_state, i, t);
-        if(new_i != -1 && new_i < capacity) {
+        int new_i = updateParticle(&electron, d_electrons, deltaTime, n, capacity, split_chance, remove_chance, &rand_state, i, t);
+        if(new_i != -1 && new_i < capacity) {  // If a new particle was spawned and there is room for it.
             newRandState(d_rand_states, new_i, randInt(&rand_state, 0, 10000));
             __threadfence();
             d_electrons[new_i].timestamp = t;
         }
+        else if (electron.timestamp == DEAD){  // If particle is to be removed.
+            break;
+        }
     }
-    electron.timestamp = -1;
+    if (electron.timestamp != DEAD) electron.timestamp = -1;
+
     d_electrons[i] = electron;
     d_rand_states[i] = rand_state;
 }
 
-__global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, curandState* d_rand_states, int poisson_timestep, int sleep_time_ns, int* n_done, int* i_global) {
+__global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* d_rand_states, int poisson_timestep, int sleep_time_ns, int* n_done, int* i_global) {
 
     while (true) {
         __syncthreads(); //sync threads seems to be able to handle threads being terminated
@@ -144,10 +154,28 @@ __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, i
             __nanosleep(sleep_time_ns);
         }
 
-        simulateMany(d_electrons, deltaTime, n, capacity, split_chance, d_rand_states, i, max(1, d_electrons[i].timestamp + 1), poisson_timestep);
+        simulateMany(d_electrons, deltaTime, n, capacity, split_chance, remove_chance, d_rand_states, i, max(1, d_electrons[i].timestamp + 1), poisson_timestep);
         atomicAdd(n_done,1);
 
     }
+}
+
+__global__ static void remove_dead_particles(Electron* d_electrons_old, Electron* d_electrons_new, int* n, int start_n){
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= start_n) return;
+    int i_local = -1;
+    if (d_electrons_old[i].timestamp != DEAD){
+        i_local = atomicAdd(&n_block, 1);
+    }
+
+    __syncthreads();
+    if (threadIdx.x == 0){
+        i_block = atomicAdd(n, n_block);
+    }
+    __syncthreads();
+    
+    if (i_local == -1) return;
+    d_electrons_new[i_block + i_local] = d_electrons_old[i];
 }
 
 static void log(int verbose, int t, Electron* electrons_host, Electron* electrons, int* n_host, int* n, int capacity){
@@ -187,8 +215,8 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     
     Electron* h_electrons = (Electron *)calloc(capacity, sizeof(Electron));
     Electron* d_electrons;
-    cudaMalloc(&d_electrons, capacity * sizeof(Electron));
-    cudaMemset(d_electrons, 0, capacity * sizeof(Electron));
+    cudaMalloc(&d_electrons, 2 * capacity * sizeof(Electron));
+    cudaMemset(d_electrons, 0, 2 * capacity * sizeof(Electron));
 
     curandState* d_rand_states;
     cudaMalloc(&d_rand_states, capacity * sizeof(curandState));
@@ -216,10 +244,16 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
 
             for (int t = 0; t < poisson_steps; t++)
             {
-                log(verbose, t, h_electrons, d_electrons, n_host, n, capacity);
+                int source_index = (t % 2) * capacity;  // Flips between 0 and capacity.
+                int destination_index = ((t + 1) % 2) * capacity;  // Opposite of above.
+                log(verbose, t, h_electrons, &d_electrons[source_index], n_host, n, capacity);
                 cudaMemset(n_done, 0, sizeof(int));
                 cudaMemset(i_global, 0, sizeof(int));
-                poisson<<<num_blocks, block_size>>>(d_electrons, 0.1, n, capacity, split_chance, d_rand_states, poisson_timestep, sleep_time_ns, n_done, i_global);
+                poisson<<<num_blocks, block_size>>>(&d_electrons[source_index], 0.1, n, capacity, split_chance, remove_chance, d_rand_states, poisson_timestep, sleep_time_ns, n_done, i_global);
+                cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
+                cudaMemset(n, 0, sizeof(int));
+                int num_blocks_all = (min(*n_host, capacity) + block_size - 1) / block_size;
+                remove_dead_particles<<<num_blocks_all, block_size>>>(&d_electrons[source_index], &d_electrons[destination_index], n, min(*n_host, capacity));
             }
             log(verbose, poisson_steps, h_electrons, d_electrons, n_host, n, capacity);
             

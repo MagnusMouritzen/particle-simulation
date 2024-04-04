@@ -1,11 +1,11 @@
 #include <cuda_runtime.h>
 #include <stdio.h>
-#include <curand.h>
-#include <curand_kernel.h>
 #include <cstring>
 #include <math.h>
 #include <stdexcept>
-#include "mvp.h"
+
+#include "pic.h"
+
 
 #define DEAD -2
 
@@ -16,29 +16,6 @@ __shared__ int capacity;
 
 __shared__ int n_block;
 __shared__ int new_i_block;
-
-__device__ static void newRandState(curandState* d_rand_states, int i, int seed){
-    curand_init(39587, seed, 0, &d_rand_states[i]);
-}
-
-__device__ static float randFloat(curandState* state, float min, float max){
-    float rand = curand_uniform(state);
-    rand *= (max - min);
-    rand += min;
-    return rand;
-}
-
-__device__ static int randInt(curandState* state, int min, int max){
-    float rand = curand_uniform(state);
-    rand *= (max - min + 0.999999);
-    rand += min;
-    return (int)truncf(rand);
-}
-
-__global__ static void setup_rand(curandState* d_rand_states) {
-    int i = threadIdx.x+blockDim.x*blockIdx.x;
-    newRandState(d_rand_states, i, i);
-}
 
 __global__ static void setup_particles(Electron* d_electrons, curandState* d_rand_states, int init_n) {
     int i = threadIdx.x+blockDim.x*blockIdx.x;

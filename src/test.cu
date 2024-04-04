@@ -1,6 +1,6 @@
 #include <algorithm>
 #include <cmath>
-#include "mvp.h"
+#include "pic.h"
 #include "test.h"
 using namespace std;
 
@@ -25,7 +25,7 @@ void runBenchmark(){
                                     printf("Skip %d %d %.6f %d\n", init_n, max_t, split_chance, max_n);
                                     continue;
                                 }
-                                RunData run_data = runMVP(init_n, max_n, max_t, function, 0, block_size, sleep_time, 0.01, split_chance);
+                                RunData run_data = runPIC(init_n, max_n, max_t, function, 0, block_size, sleep_time, 0.01, split_chance, 0.1);
                                 if (run_data.final_n >= max_n) {
                                     //throw runtime_error("Illegal configuration, capacity reached!");
                                     printf("\n\n\nIllegal!!!\n\n\n");
@@ -53,7 +53,7 @@ void runUnitTest(int init_n, int max_n, int max_t, int verbose, int block_size, 
     bool broken[amnt];
     int final_ns[amnt];
 
-    RunData base_run_data = runMVP(init_n, max_n, max_t, base_function, 0, block_size, sleep_time, 0.01, split_chance);
+    RunData base_run_data = runPIC(init_n, max_n, max_t, base_function, 0, block_size, sleep_time, 0.01, split_chance, 0.1);
     Electron* base_electrons = base_run_data.electrons;
     int base_final_n = base_run_data.final_n;
     printf("Sorting base...\n");
@@ -63,7 +63,7 @@ void runUnitTest(int init_n, int max_n, int max_t, int verbose, int block_size, 
     for(int fi = 0; fi < amnt; fi++){
         int function = test_functions[fi];
         broken[fi] = false;
-        RunData run_data = runMVP(init_n, max_n, max_t, function, 0, block_size, sleep_time, 0.01, split_chance);
+        RunData run_data = runPIC(init_n, max_n, max_t, function, 0, block_size, sleep_time, 0.01, split_chance, 0.1);
         Electron* electrons = run_data.electrons;
         int final_n = run_data.final_n;
         final_ns[fi] = final_n;

@@ -6,7 +6,7 @@ using namespace std;
 __global__ void setup_particles(Electron* d_electrons, curandState* d_rand_states, int init_n) {
     int i = threadIdx.x+blockDim.x*blockIdx.x;
     if (i >= init_n) return;
-    d_electrons[i].position = make_float3(randFloat(&d_rand_states[i], 1, 499), randFloat(&d_rand_states[i], 1, 499), 1.0);
+    d_electrons[i].position = make_float3(randFloat(&d_rand_states[i], 1, 499), randFloat(&d_rand_states[i], 1, 499), randFloat(&d_rand_states[i], 1, 499));
     d_electrons[i].weight = 1.0;
     d_electrons[i].timestamp = -1;
 }
@@ -14,6 +14,8 @@ __global__ void setup_particles(Electron* d_electrons, curandState* d_rand_state
 __device__ int updateParticle(Electron* electron, Electron* new_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* rand_state, int i, int t) {
     electron->velocity.y -= 9.82 * deltaTime * electron->weight;
     electron->position.y += electron->velocity.y * deltaTime;
+
+    electron->position.z += electron->velocity.z * deltaTime;
 
     int new_i = -1;
     float rand = randFloat(rand_state, 0, 100);
@@ -42,8 +44,8 @@ __device__ int updateParticle(Electron* electron, Electron* new_electrons, float
                     added_electron.velocity.x = electron->velocity.x + 20;
                 }
                 added_electron.position.x = electron->position.x + added_electron.velocity.x * deltaTime;
-                added_electron.position.z = 1.0;
-                added_electron.velocity.z = 1.0;
+                added_electron.position.z = electron->position.z;
+                added_electron.velocity.z = electron->velocity.z;
                 added_electron.weight = electron->weight;
                 added_electron.creator = i;
                 

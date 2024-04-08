@@ -1,7 +1,11 @@
 #pragma once
 
 #include <tuple>
+#include <stdio.h>
+
 using namespace std;
+
+#define DEAD -2
 
 struct Electron {
     public:

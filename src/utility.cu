@@ -104,3 +104,28 @@ void printCSV(const vector<TimingData>& data, string filename){
     printCSV(data, os);
     fclose(os);
 }
+
+void checkCudaError() {
+    cudaError_t error = cudaGetLastError();
+    if (error != cudaSuccess) {
+        printf("CUDA error: %s \n", cudaGetErrorString(error));
+        throw runtime_error(cudaGetErrorString(error));
+        // Handle error appropriately
+    }
+}
+
+void log(int verbose, int t, Electron* electrons_host, Electron* electrons, int* n_host, int* n, int capacity){
+    if (verbose == 0 || t % verbose != 0) return;
+    cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
+    int true_n = min(*n_host, capacity);
+    cudaMemcpy(electrons_host, electrons, true_n * sizeof(Electron), cudaMemcpyDeviceToHost);
+    printf("Time %d, amount %d\n", t, *n_host);
+    for(int i = 0; i < true_n; i++){
+        electrons_host[i].print(i);
+    }
+    image(true_n, electrons_host, t); // visualize a snapshot of the current positions of the particles     
+    printf("\n");
+
+    checkCudaError();
+}
+

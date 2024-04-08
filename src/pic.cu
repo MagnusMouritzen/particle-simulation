@@ -6,93 +6,11 @@
 
 #include "pic.h"
 
-
-#define DEAD -2
-
-// __device__ curandState *d_rand_state;
-
 __shared__ int i_block;
 __shared__ int capacity;
 
 __shared__ int n_block;
 __shared__ int new_i_block;
-
-__global__ static void setup_particles(Electron* d_electrons, curandState* d_rand_states, int init_n) {
-    int i = threadIdx.x+blockDim.x*blockIdx.x;
-    if (i >= init_n) return;
-    d_electrons[i].position = make_float3(randFloat(&d_rand_states[i], 1, 499), randFloat(&d_rand_states[i], 1, 499), 1.0);
-    d_electrons[i].weight = 1.0;
-    d_electrons[i].timestamp = -1;
-}
-
-__device__ static int updateParticle(Electron* electron, Electron* new_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* rand_state, int i, int t){
-    electron->velocity.y -= 9.82 * deltaTime * electron->weight;
-    electron->position.y += electron->velocity.y * deltaTime;
-
-    int new_i = -1;
-    float rand = randFloat(rand_state, 0, 100);
-    printf("%d: (%d) rand %f\n", i, t, rand);
-    if (rand < split_chance) {
-        if (*n < capacity) {
-            new_i = atomicAdd(n, 1);
-        
-            if (new_i < capacity){
-
-                if (electron->velocity.x >= 0){
-                    electron->velocity.x += 10;
-                }
-                else{
-                    electron->velocity.x -= 10;
-                }
-
-                Electron added_electron;
-
-                added_electron.position.y = electron->position.y;
-                added_electron.velocity.y = electron->velocity.y;
-                if (electron->velocity.x >= 0){
-                    added_electron.velocity.x = electron->velocity.x - 20;
-                }
-                else{
-                    added_electron.velocity.x = electron->velocity.x + 20;
-                }
-                added_electron.position.x = electron->position.x + added_electron.velocity.x * deltaTime;
-                added_electron.position.z = 1.0;
-                added_electron.velocity.z = 1.0;
-                added_electron.weight = electron->weight;
-                added_electron.creator = i;
-                
-                new_electrons[new_i] = added_electron;
-            }
-        }
-    }
-    else if (rand < remove_chance + split_chance){
-        electron->timestamp = DEAD;
-        return new_i;
-    }
-
-    if (electron->position.y <= 0){
-        electron->position.y = -electron->position.y;
-        electron->velocity.y = -electron->velocity.y;
-    }
-    else if (electron->position.y >= 500){
-        electron->position.y = 500 - (electron->position.y - 500);
-        electron->velocity.y = -electron->velocity.y;
-    }
-
-    electron->position.x += electron->velocity.x * deltaTime;
-
-    if (electron->position.x <= 0){
-        electron->position.x = -electron->position.x;
-        electron->velocity.x = -electron->velocity.x;
-        electron->weight *= -1;
-    }
-    else if (electron->position.x >= 500){
-        electron->position.x = 500 - (electron->position.x - 500);
-        electron->velocity.x = -electron->velocity.x;
-        electron->weight *= -1;
-    }
-    return new_i;
-}
 
 
 __device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* rand_state, int i, int start_t, int poisson_timestep){
@@ -164,25 +82,6 @@ __global__ static void remove_dead_particles(Electron* d_electrons_old, Electron
     d_electrons_new[i_block + i_local] = d_electrons_old[i];
 }
 
-static void log(int verbose, int t, Electron* electrons_host, Electron* electrons, int* n_host, int* n, int capacity){
-    if (verbose == 0 || t % verbose != 0) return;
-    cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
-    int true_n = min(*n_host, capacity);
-    cudaMemcpy(electrons_host, electrons, true_n * sizeof(Electron), cudaMemcpyDeviceToHost);
-    printf("Time %d, amount %d\n", t, *n_host);
-    for(int i = 0; i < true_n; i++){
-        electrons_host[i].print(i);
-    }
-    image(true_n, electrons_host, t); // visualize a snapshot of the current positions of the particles     
-    printf("\n");
-    
-    cudaError_t error = cudaGetLastError();
-    if (error != cudaSuccess) {
-        printf("CUDA error: %s \n", cudaGetErrorString(error));
-        throw runtime_error(cudaGetErrorString(error));
-        // Handle error appropriately
-    }
-}
 
 __global__ void test_rng(curandState* states, int max, int iter){
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -230,17 +129,6 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     int* i_global;
     cudaMalloc(&i_global, sizeof(int));
 
-    /// TEST
-    test_rng<<<(100 + block_size - 1) / block_size, block_size>>>(d_rand_states, 100, 200);
-    cudaDeviceSynchronize();
-    cudaError_t error = cudaGetLastError();
-    if (error != cudaSuccess) {
-        printf("CUDA error: %s \n", cudaGetErrorString(error));
-        throw runtime_error(cudaGetErrorString(error));
-        // Handle error appropriately
-    }
-    RunData b;
-    return b;
 
     switch(mode){
         case 0: { // GOOD
@@ -276,14 +164,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
         default:
             break;
     }
-    error = cudaGetLastError();
-    if (error != cudaSuccess) {
-        printf("CUDA error: %s \n", cudaGetErrorString(error));
-        throw runtime_error(cudaGetErrorString(error));
-        // Handle error appropriately
-    }
-
-
+    checkCudaError();
 
     cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
     cudaMemcpy(h_electrons, d_electrons, min(*n_host, capacity) * sizeof(Electron), cudaMemcpyDeviceToHost);   

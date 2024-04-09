@@ -13,6 +13,9 @@ __shared__ int n_block;
 __shared__ int new_i_block;
 
 
+#define getGridCell(x,y,z) (((Cell*)((((char*)d_grid.ptr) + z * (d_grid.pitch * grid_size.y)) + y * d_grid.pitch))[x])
+
+
 __device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* rand_state, int i, int start_t, int poisson_timestep){
     Electron electron = d_electrons[i];
 
@@ -33,7 +36,7 @@ __device__ static void simulateMany(Electron* d_electrons, float deltaTime, int*
     d_electrons[i] = electron;
 }
 
-__global__ static void poisson(Electron* d_electrons, Cell* d_grid, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* d_rand_states, int poisson_timestep, int sleep_time_ns, int* n_done, int* i_global) {
+__global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* d_rand_states, int poisson_timestep, int sleep_time_ns, int* n_done, int* i_global) {
     int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
     while (true) {
         __syncthreads(); //sync threads seems to be able to handle threads being terminated
@@ -82,64 +85,76 @@ __global__ static void remove_dead_particles(Electron* d_electrons_old, Electron
     d_electrons_new[i_block + i_local] = d_electrons_old[i];
 }
 
-__global__ static void particlesToGrid(Cell d_grid[512][512][512], Electron* d_electrons, int* n) {
+__global__ static void particlesToGrid(cudaPitchedPtr d_grid, Electron* d_electrons, int* n, int3 grid_size) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= *n) return;
 
+
     Electron electron = d_electrons[i];
 
-    int grid_index_x = electron.position.x/8.3e-3;
-    int grid_index_y = electron.position.y/8.3e-3;
-    int grid_index_z = electron.position.z/8.3e-3;
+    int x = electron.position.x/cell_size;
+    int y = electron.position.y/cell_size;
+    int z = electron.position.z/cell_size;
 
-    d_grid[grid_index_x][grid_index_y][grid_index_z].charge += electron_charge;
+    getGridCell(x,y,z).charge += electron_charge;
 
 }
 
-__global__ static void gridToParticles(Cell d_grid[512][512][512], Electron* d_electrons, int* n) {
+__global__ static void gridToParticles(cudaPitchedPtr d_grid, Electron* d_electrons, int* n, int3 grid_size) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= *n) return;
 
     Electron electron = d_electrons[i];
 
-    int grid_index_x = electron.position.x/8.3e-3;
-    int grid_index_y = electron.position.y/8.3e-3;
-    int grid_index_z = electron.position.z/8.3e-3;
+    int x = electron.position.x/cell_size;
+    int y = electron.position.y/cell_size;
+    int z = electron.position.z/cell_size;
 
-    electron.acceleration =  d_grid[grid_index_x][grid_index_y][grid_index_z].acceleration;
+
+    electron.acceleration =  getGridCell(x,y,z).acceleration;
 
     d_electrons[i] = electron;
 
 }
-__global__ void resetGrid(Cell[512][512][512] d_grid){
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
-    int z = blockIdx.z * blockDim.z + threadIdx.z;
-
-    d_grid[x][y][z].charge = 0;
-}
-
-__global__ void updateGrid(Cell[512][512][512] d_grid){
+__global__ void resetGrid(cudaPitchedPtr d_grid, int3 grid_size) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     int z = blockIdx.z * blockDim.z + threadIdx.z;
     
+    getGridCell(x,y,z).charge = 0;
+}
+__global__ void updateGrid(cudaPitchedPtr d_grid, double electric_force_constant, int3 grid_size) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    // INSERT ELEMENT TO 3D ARRAY
+    char* gridPtr = (char*)d_grid.ptr;
+    size_t pitch = d_grid.pitch; // the number of bytes in a row of the array
+    size_t slicePitch = pitch * grid_size.y; // the number of bytes pr slice
+
+    char* slice = gridPtr + z * slicePitch; // get slice 
+
+    Cell* row = (Cell*)(slice + y * pitch); // get row in slice
+
+
     double xAcc = 0;
-    if (x != 0) xAcc -= Cell[x-1][y][z].charge;
-    if (x != 511) xAcc += Cell[x+1][y][z].charge;
+    if (x != 0) xAcc -= row[x-1].charge;
+    if (x != grid_size.x-1) xAcc += row[x+1].charge;
     xAcc *= electric_force_constant;
 
     double yAcc = 0;
-    if (y != 0) yAcc -= Cell[x][y-1][z].charge;
-    if (y != 511) yAcc += Cell[x][y+1][z].charge;
+    if (y != 0) yAcc -= (row-pitch)[x].charge;
+    if (y != grid_size.y-1) yAcc += (row+pitch)[x].charge;
     yAcc *= electric_force_constant;
 
     double zAcc = 0;
-    if (z != 0) zAcc -= Cell[x-1][y][z-1].charge;
-    if (z != 511) zAcc += Cell[x][y][z+1].charge;
+    if (z != 0) zAcc -= (row-slicePitch)[x].charge;
+    if (z != grid_size.z-1) zAcc += (row+slicePitch)[x].charge;
     zAcc *= electric_force_constant;
 
-    Cell[x][y][z].acceleration = make_double3(xAcc, yAcc, zAcc);
+    
+    row[x].acceleration = make_float3((float)xAcc, (float)yAcc, (float)zAcc);
 }
 
 
@@ -184,11 +199,12 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     cudaMalloc(&i_global, sizeof(int));
 
 
-    Cell* d_grid;
-    cudaMalloc(&d_grid, grid_size.x * grid_size.y * grid_size.z * sizeof(Cell));
+    cudaExtent extent = make_cudaExtent(Grid_Size.x * sizeof(Cell), Grid_Size.y, Grid_Size.z);
+    cudaPitchedPtr d_grid;
+    cudaMalloc3D(&d_grid, extent);
 
     dim3 dim_block(8,8,8);
-    dim3 dim_grid(grid_size.x/dim_block.x, grid_size.y/dim_block.y, grid_size.z/dim_block.z);
+    dim3 dim_grid(Grid_Size.x/dim_block.x, Grid_Size.y/dim_block.y, Grid_Size.z/dim_block.z);
 
     switch(mode){
         case 0: { // GOOD
@@ -207,12 +223,12 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
                 cudaMemset(n_done, 0, sizeof(int));
                 cudaMemset(i_global, 0, sizeof(int));
 
-                resetGrid<<<dim_grid, dim_block>>>(d_grid);
-                particlesToGrid<<<num_blocks_all, block_size>>>(d_grid, d_electrons, n);
-                updateGrid<<<dim_grid, dim_block>>>(d_grid);
-                gridToParticles<<<num_blocks_all, block_size>>>(d_grid, d_electrons, n);
+                resetGrid<<<dim_grid, dim_block>>>(d_grid, Grid_Size);
+                particlesToGrid<<<num_blocks_all, block_size>>>(d_grid, d_electrons, n, Grid_Size);
+                updateGrid<<<dim_grid, dim_block>>>(d_grid, Electric_Force_Constant, Grid_Size);
+                gridToParticles<<<num_blocks_all, block_size>>>(d_grid, d_electrons, n, Grid_Size);
 
-                poisson<<<num_blocks_pers, block_size>>>(&d_electrons[source_index], d_grid, 0.1, n, capacity, split_chance, remove_chance, d_rand_states, poisson_timestep, sleep_time_ns, n_done, i_global);
+                poisson<<<num_blocks_pers, block_size>>>(&d_electrons[source_index], 0.1, n, capacity, split_chance, remove_chance, d_rand_states, poisson_timestep, sleep_time_ns, n_done, i_global);
                 cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
                 cudaMemset(n, 0, sizeof(int));
                 num_blocks_all = (min(*n_host, capacity) + block_size - 1) / block_size;
@@ -260,3 +276,30 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
 
     return run_data;
 }
+
+
+// LOOP OVER 3D ARRAY
+// char* gridPtr = d_grid.ptr;
+// size_t pitch = d_grid.pitch; // the number of bytes in a row of the array
+// size_t slicePitch = pitch * grid_size.y; // the number of bytes pr slice
+// for (int z = 0; z < grid_size.z; ++z) {
+//     char* slice = gridPtr + z * slicePitch;
+//     for (int y = 0; y < grid_size.y; ++y) {
+//         Cell* row = (Cell*)(slice + y * pitch);
+//         for (int x = 0; x < grid_size.x; ++x) {
+//             Cell element = row[x];
+//         }
+//     }
+// }
+
+
+// INSERT ELEMENT TO 3D ARRAY
+// char* gridPtr = d_grid.ptr;
+// size_t pitch = d_grid.pitch; // the number of bytes in a row of the array
+// size_t slicePitch = pitch * grid_size.y; // the number of bytes pr slice
+
+// char* slice = gridPtr + z * slicePitch; // get slice 
+
+// Cell* row = (Cell*)(slice + y * pitch); // get row in slice
+
+// row[x].charge = 0;

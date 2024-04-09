@@ -6,7 +6,7 @@
 using namespace std;
 
 #define DEAD -2
-double electron_charge = -1.602176487e-19;
+#define electron_charge -1.602176487e-19
 
 struct Electron {
     public:

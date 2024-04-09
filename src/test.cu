@@ -1,6 +1,3 @@
-#include <algorithm>
-#include <cmath>
-#include "pic.h"
 #include "test.h"
 using namespace std;
 

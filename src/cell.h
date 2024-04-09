@@ -9,5 +9,5 @@ double electric_force_constant = 1 / (4 * pi * epsilon0 * cell_size * cell_size)
 struct Cell {
     public:
         double charge;
-        double3 acceleration;
+        float3 acceleration;
 };

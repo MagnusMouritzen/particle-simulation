@@ -82,6 +82,35 @@ __global__ static void remove_dead_particles(Electron* d_electrons_old, Electron
     d_electrons_new[i_block + i_local] = d_electrons_old[i];
 }
 
+__global__ static void particlesToGrid(Cell d_grid[512][512][512], Electron* d_electrons, int* n) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= *n) return;
+
+    Electron electron = d_electrons[i];
+
+    int grid_index_x = electron.position.x/8.3e-3;
+    int grid_index_y = electron.position.y/8.3e-3;
+    int grid_index_z = electron.position.z/8.3e-3;
+
+    d_grid[grid_index_x][grid_index_y][grid_index_z].charge += electron_charge;
+
+}
+
+__global__ static void gridToParticles(Cell d_grid[512][512][512], Electron* d_electrons, int* n) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= *n) return;
+
+    Electron electron = d_electrons[i];
+
+    int grid_index_x = electron.position.x/8.3e-3;
+    int grid_index_y = electron.position.y/8.3e-3;
+    int grid_index_z = electron.position.z/8.3e-3;
+
+    electron.acceleration =  d_grid[grid_index_x][grid_index_y][grid_index_z].acceleration;
+
+    d_electrons[i] = electron;
+
+}
 
 RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timestep, int mode, int verbose, int block_size, int sleep_time_ns, float split_chance, float remove_chance) {
     printf("MVP with\ninit n: %d\ncapacity: %d\npoisson steps: %d\npoisson_timestep: %d\nblock size: %d\nsleep time: %d\nsplit chance: %f\nremove chance: %f\n", init_n, capacity, poisson_steps, poisson_timestep, block_size, sleep_time_ns, split_chance, remove_chance);
@@ -147,9 +176,9 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
                 cudaMemset(n_done, 0, sizeof(int));
                 cudaMemset(i_global, 0, sizeof(int));
 
-                particlesToGrid<<<num_blocks_all, block_size>>>(d_grid, d_electrons);
+                particlesToGrid<<<num_blocks_all, block_size>>>(d_grid, d_electrons, n);
                 updateGrid<<<dim_grid, dim_block>>>(d_grid);
-                gridToParticles<<<num_blocks_all, block_size>>>(d_grid, d_electrons);
+                gridToParticles<<<num_blocks_all, block_size>>>(d_grid, d_electrons, n);
 
                 poisson<<<num_blocks_pers, block_size>>>(&d_electrons[source_index], d_grid, 0.1, n, capacity, split_chance, remove_chance, d_rand_states, poisson_timestep, sleep_time_ns, n_done, i_global);
                 cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);

@@ -82,6 +82,37 @@ __global__ static void remove_dead_particles(Electron* d_electrons_old, Electron
     d_electrons_new[i_block + i_local] = d_electrons_old[i];
 }
 
+__global__ void resetGrid(Cell[512][512][512] d_grid){
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    d_grid[x][y][z].charge = 0;
+}
+
+__global__ void updateGrid(Cell[512][512][512] d_grid){
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    int z = blockIdx.z * blockDim.z + threadIdx.z;
+    
+    double xAcc = 0;
+    if (x != 0) xAcc -= Cell[x-1][y][z].charge;
+    if (x != 511) xAcc += Cell[x+1][y][z].charge;
+    xAcc *= electric_force_constant;
+
+    double yAcc = 0;
+    if (y != 0) yAcc -= Cell[x][y-1][z].charge;
+    if (y != 511) yAcc += Cell[x][y+1][z].charge;
+    yAcc *= electric_force_constant;
+
+    double zAcc = 0;
+    if (z != 0) zAcc -= Cell[x-1][y][z-1].charge;
+    if (z != 511) zAcc += Cell[x][y][z+1].charge;
+    zAcc *= electric_force_constant;
+
+    Cell[x][y][z].acceleration = make_double3(xAcc, yAcc, zAcc);
+}
+
 
 RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timestep, int mode, int verbose, int block_size, int sleep_time_ns, float split_chance, float remove_chance) {
     printf("MVP with\ninit n: %d\ncapacity: %d\npoisson steps: %d\npoisson_timestep: %d\nblock size: %d\nsleep time: %d\nsplit chance: %f\nremove chance: %f\n", init_n, capacity, poisson_steps, poisson_timestep, block_size, sleep_time_ns, split_chance, remove_chance);
@@ -147,6 +178,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
                 cudaMemset(n_done, 0, sizeof(int));
                 cudaMemset(i_global, 0, sizeof(int));
 
+                resetGrid<<<dim_grid, dim_block>>>(d_grid);
                 particlesToGrid<<<num_blocks_all, block_size>>>(d_grid, d_electrons);
                 updateGrid<<<dim_grid, dim_block>>>(d_grid);
                 gridToParticles<<<num_blocks_all, block_size>>>(d_grid, d_electrons);

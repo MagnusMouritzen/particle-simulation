@@ -33,7 +33,7 @@ __device__ static void simulateMany(Electron* d_electrons, float deltaTime, int*
     d_electrons[i] = electron;
 }
 
-__global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* d_rand_states, int poisson_timestep, int sleep_time_ns, int* n_done, int* i_global) {
+__global__ static void poisson(Electron* d_electrons, Cell* d_grid, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* d_rand_states, int poisson_timestep, int sleep_time_ns, int* n_done, int* i_global) {
     int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
     while (true) {
         __syncthreads(); //sync threads seems to be able to handle threads being terminated
@@ -83,12 +83,6 @@ __global__ static void remove_dead_particles(Electron* d_electrons_old, Electron
 }
 
 
-__global__ void test_rng(curandState* states, int max, int iter){
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= max) return;
-    for(int j = 0; j < iter; j++) printf("%f\n", randFloat(&states[i], 0, 100));
-}
-
 RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timestep, int mode, int verbose, int block_size, int sleep_time_ns, float split_chance, float remove_chance) {
     printf("MVP with\ninit n: %d\ncapacity: %d\npoisson steps: %d\npoisson_timestep: %d\nblock size: %d\nsleep time: %d\nsplit chance: %f\nremove chance: %f\n", init_n, capacity, poisson_steps, poisson_timestep, block_size, sleep_time_ns, split_chance, remove_chance);
 
@@ -130,6 +124,12 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     cudaMalloc(&i_global, sizeof(int));
 
 
+    Cell* d_grid;
+    cudaMalloc(&d_grid, grid_size.x * grid_size.y * grid_size.z * sizeof(Cell));
+
+    dim3 dim_block(8,8,8);
+    dim3 dim_grid(grid_size.x/dim_block.x, grid_size.y/dim_block.y, grid_size.z/dim_block.z);
+
     switch(mode){
         case 0: { // GOOD
             timing_data.function = "GOOD";
@@ -137,6 +137,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
 
             int source_index = 0;
             int destination_index = 0;
+            int num_blocks_all = (min(*n_host, capacity) + block_size - 1) / block_size;
             for (int t = 0; t < poisson_steps; t++)
             {
                 source_index = (t % 2) * capacity;  // Flips between 0 and capacity.
@@ -145,10 +146,15 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
                 log(verbose, t, h_electrons, &d_electrons[source_index], n_host, n, capacity);
                 cudaMemset(n_done, 0, sizeof(int));
                 cudaMemset(i_global, 0, sizeof(int));
-                poisson<<<num_blocks_pers, block_size>>>(&d_electrons[source_index], 0.1, n, capacity, split_chance, remove_chance, d_rand_states, poisson_timestep, sleep_time_ns, n_done, i_global);
+
+                particlesToGrid<<<num_blocks_all, block_size>>>(d_grid, d_electrons);
+                updateGrid<<<dim_grid, dim_block>>>(d_grid);
+                gridToParticles<<<num_blocks_all, block_size>>>(d_grid, d_electrons);
+
+                poisson<<<num_blocks_pers, block_size>>>(&d_electrons[source_index], d_grid, 0.1, n, capacity, split_chance, remove_chance, d_rand_states, poisson_timestep, sleep_time_ns, n_done, i_global);
                 cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
                 cudaMemset(n, 0, sizeof(int));
-                int num_blocks_all = (min(*n_host, capacity) + block_size - 1) / block_size;
+                num_blocks_all = (min(*n_host, capacity) + block_size - 1) / block_size;
                 if (*n_host == 0){
                     printf("Hit 0\n");
                     break;

@@ -96,7 +96,7 @@ __global__ static void particlesToGrid(cudaPitchedPtr d_grid, Electron* d_electr
     int y = electron.position.y/cell_size;
     int z = electron.position.z/cell_size;
 
-    getGridCell(x,y,z).charge += electron_charge;
+    atomicAdd(&getGridCell(x,y,z).charge, 1);
 
 }
 
@@ -112,9 +112,6 @@ __global__ static void gridToParticles(cudaPitchedPtr d_grid, Electron* d_electr
 
 
     electron.acceleration =  getGridCell(x,y,z).acceleration;
-
-
-    printf("x: %d, y: %d, z: %d \n", x, y, z);
 
 
     d_electrons[i] = electron;
@@ -159,9 +156,6 @@ __global__ void updateGrid(cudaPitchedPtr d_grid, double electric_force_constant
 
     ((Cell*)row)[x].acceleration = make_float3((float)xAcc, (float)yAcc, (float)zAcc);
 
-    if(xAcc != 0 || yAcc != 0 || zAcc != 0) {
-        printf("Update:  x: %d, y: %d, z: %d, acceleration x: %lf, acceleration y: %lf, acceleration z: %lf, acceleration z \n", x, y, z, xAcc, yAcc, zAcc);
-    }
 }
 
 
@@ -235,7 +229,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
                 updateGrid<<<dim_grid, dim_block>>>(d_grid, Electric_Force_Constant, Grid_Size);
                 gridToParticles<<<num_blocks_all, block_size>>>(d_grid, d_electrons, n, Grid_Size);
 
-                poisson<<<num_blocks_pers, block_size>>>(&d_electrons[source_index], 0.1, n, capacity, split_chance, remove_chance, d_rand_states, poisson_timestep, sleep_time_ns, n_done, i_global, Sim_Size);
+                poisson<<<num_blocks_pers, block_size>>>(&d_electrons[source_index], 0.0001, n, capacity, split_chance, remove_chance, d_rand_states, poisson_timestep, sleep_time_ns, n_done, i_global, Sim_Size);
                 cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
                 cudaMemset(n, 0, sizeof(int));
                 num_blocks_all = (min(*n_host, capacity) + block_size - 1) / block_size;

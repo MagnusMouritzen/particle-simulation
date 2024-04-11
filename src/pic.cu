@@ -16,11 +16,11 @@ __shared__ int new_i_block;
 #define getGridCell(x,y,z) (((Cell*)((((char*)d_grid.ptr) + z * (d_grid.pitch * grid_size.y)) + y * d_grid.pitch))[x])
 
 
-__device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* rand_state, int i, int start_t, int poisson_timestep){
+__device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* rand_state, int i, int start_t, int poisson_timestep, float3 sim_size){
     Electron electron = d_electrons[i];
 
     for(int t = start_t; t <= poisson_timestep; t++){
-        int new_i = updateParticle(&electron, d_electrons, deltaTime, n, capacity, split_chance, remove_chance, rand_state, i, t);
+        int new_i = updateParticle(&electron, d_electrons, deltaTime, n, capacity, split_chance, remove_chance, rand_state, i, t, sim_size);
         if(new_i != -1 && new_i < capacity) {  // If a new particle was spawned and there is room for it.
             __threadfence();
             d_electrons[new_i].timestamp = t;
@@ -36,7 +36,7 @@ __device__ static void simulateMany(Electron* d_electrons, float deltaTime, int*
     d_electrons[i] = electron;
 }
 
-__global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* d_rand_states, int poisson_timestep, int sleep_time_ns, int* n_done, int* i_global) {
+__global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* d_rand_states, int poisson_timestep, int sleep_time_ns, int* n_done, int* i_global, float3 sim_size) {
     int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
     while (true) {
         __syncthreads(); //sync threads seems to be able to handle threads being terminated
@@ -57,7 +57,7 @@ __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, i
             __nanosleep(sleep_time_ns);
         }
 
-        simulateMany(d_electrons, deltaTime, n, capacity, split_chance, remove_chance, &d_rand_states[thread_id], i, max(1, d_electrons[i].timestamp + 1), poisson_timestep);
+        simulateMany(d_electrons, deltaTime, n, capacity, split_chance, remove_chance, &d_rand_states[thread_id], i, max(1, d_electrons[i].timestamp + 1), poisson_timestep, sim_size);
         atomicAdd(n_done,1);
 
     }
@@ -135,26 +135,25 @@ __global__ void updateGrid(cudaPitchedPtr d_grid, double electric_force_constant
 
     char* slice = gridPtr + z * slicePitch; // get slice 
 
-    Cell* row = (Cell*)(slice + y * pitch); // get row in slice
+    char* row = (slice + y * pitch); // get row in slice
 
 
     double xAcc = 0;
-    if (x != 0) xAcc -= row[x-1].charge;
-    if (x != grid_size.x-1) xAcc += row[x+1].charge;
+    if (x != 0) xAcc -= ((Cell*)row)[x-1].charge;
+    if (x != grid_size.x-1) xAcc += ((Cell*)row)[x+1].charge;
     xAcc *= electric_force_constant;
 
     double yAcc = 0;
-    if (y != 0) yAcc -= (row-pitch)[x].charge;
-    if (y != grid_size.y-1) yAcc += (row+pitch)[x].charge;
+    if (y != 0) yAcc -= ((Cell*)(row - pitch))[x].charge;
+    if (y != grid_size.y-1) yAcc += ((Cell*)(row + pitch))[x].charge;
     yAcc *= electric_force_constant;
 
     double zAcc = 0;
-    if (z != 0) zAcc -= (row-slicePitch)[x].charge;
-    if (z != grid_size.z-1) zAcc += (row+slicePitch)[x].charge;
+    if (z != 0) zAcc -= ((Cell*)(row-slicePitch))[x].charge;
+    if (z != grid_size.z-1) zAcc += ((Cell*)(row+slicePitch))[x].charge;
     zAcc *= electric_force_constant;
 
-    
-    row[x].acceleration = make_float3((float)xAcc, (float)yAcc, (float)zAcc);
+    ((Cell*)row)[x].acceleration = make_float3((float)xAcc, (float)yAcc, (float)zAcc);
 }
 
 
@@ -184,7 +183,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     Electron* d_electrons;
     cudaMalloc(&d_electrons, 2 * capacity * sizeof(Electron));
     cudaMemset(d_electrons, 0, 2 * capacity * sizeof(Electron));
-    setup_particles<<<(init_n + block_size - 1) / block_size, block_size>>>(d_electrons, d_rand_states, init_n);
+    setup_particles<<<(init_n + block_size - 1) / block_size, block_size>>>(d_electrons, d_rand_states, init_n, Sim_Size);
 
     int* n_host = (int*)malloc(sizeof(int));
     int* n;
@@ -228,7 +227,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
                 updateGrid<<<dim_grid, dim_block>>>(d_grid, Electric_Force_Constant, Grid_Size);
                 gridToParticles<<<num_blocks_all, block_size>>>(d_grid, d_electrons, n, Grid_Size);
 
-                poisson<<<num_blocks_pers, block_size>>>(&d_electrons[source_index], 0.1, n, capacity, split_chance, remove_chance, d_rand_states, poisson_timestep, sleep_time_ns, n_done, i_global);
+                poisson<<<num_blocks_pers, block_size>>>(&d_electrons[source_index], 0.1, n, capacity, split_chance, remove_chance, d_rand_states, poisson_timestep, sleep_time_ns, n_done, i_global, Sim_Size);
                 cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
                 cudaMemset(n, 0, sizeof(int));
                 num_blocks_all = (min(*n_host, capacity) + block_size - 1) / block_size;

@@ -11,15 +11,41 @@ __global__ void setup_particles(Electron* d_electrons, curandState* d_rand_state
     d_electrons[i].timestamp = -1;
 }
 
-__device__ int updateParticle(Electron* electron, Electron* new_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* rand_state, int i, int t) {
-    electron->velocity.y -= 9.82 * deltaTime * electron->weight;
-    electron->position.y += electron->velocity.y * deltaTime;
+__device__ void leapfrog(Electron* electron, float delta_time){
+    float delta_time_half = delta_time / 2;
 
-    electron->position.z += electron->velocity.z * deltaTime;
+    // Accelerate half
+    electron->velocity.x -= electron->acceleration.x * delta_time_half;
+    electron->velocity.y -= electron->acceleration.y * delta_time_half;
+    electron->velocity.z -= electron->acceleration.z * delta_time_half;
 
+    // Move
+    electron->position.x += electron->velocity.x * delta_time;
+    electron->position.y += electron->velocity.y * delta_time;
+    electron->position.z += electron->velocity.z * delta_time;
+
+    // Accelerate half
+    electron->velocity.x -= electron->acceleration.x * delta_time_half;
+    electron->velocity.y -= electron->acceleration.y * delta_time_half;
+    electron->velocity.z -= electron->acceleration.z * delta_time_half;
+}
+
+__device__ bool checkOutOfBounds(Electron* electron, float3 sim_size){
+    if (electron->position.x < 0
+     || electron->position.x >= sim_size.x
+     || electron->position.y < 0
+     || electron->position.y >= sim_size.y
+     || electron->position.z < 0
+     || electron->position.z >= sim_size.z){
+         electron->timestamp = DEAD;
+         return true;
+     }
+     return false;
+}
+
+__device__ int collider(Electron* electron, Electron* new_electrons, float delta_time, int* n, int capacity, float split_chance, float remove_chance, curandState* rand_state, int i, int t){
     int new_i = -1;
     float rand = randFloat(rand_state, 0, 100);
-    printf("%d: (%d) rand %f\n", i, t, rand);
     if (rand < split_chance) {
         if (*n < capacity) {
             new_i = atomicAdd(n, 1);
@@ -43,7 +69,7 @@ __device__ int updateParticle(Electron* electron, Electron* new_electrons, float
                 else{
                     added_electron.velocity.x = electron->velocity.x + 20;
                 }
-                added_electron.position.x = electron->position.x + added_electron.velocity.x * deltaTime;
+                added_electron.position.x = electron->position.x + added_electron.velocity.x * delta_time_half;
                 added_electron.position.z = electron->position.z;
                 added_electron.velocity.z = electron->velocity.z;
                 added_electron.weight = electron->weight;
@@ -57,27 +83,11 @@ __device__ int updateParticle(Electron* electron, Electron* new_electrons, float
         electron->timestamp = DEAD;
         return new_i;
     }
-
-    if (electron->position.y <= 0){
-        electron->position.y = -electron->position.y;
-        electron->velocity.y = -electron->velocity.y;
-    }
-    else if (electron->position.y >= 500){
-        electron->position.y = 500 - (electron->position.y - 500);
-        electron->velocity.y = -electron->velocity.y;
-    }
-
-    electron->position.x += electron->velocity.x * deltaTime;
-
-    if (electron->position.x <= 0){
-        electron->position.x = -electron->position.x;
-        electron->velocity.x = -electron->velocity.x;
-        electron->weight *= -1;
-    }
-    else if (electron->position.x >= 500){
-        electron->position.x = 500 - (electron->position.x - 500);
-        electron->velocity.x = -electron->velocity.x;
-        electron->weight *= -1;
-    }
     return new_i;
+}
+
+__device__ int updateParticle(Electron* electron, Electron* new_electrons, float delta_time, int* n, int capacity, float split_chance, float remove_chance, curandState* rand_state, int i, int t, float3 sim_size) {
+    leapfrog(electron, delta_time);
+    if (checkOutOfBounds(electron, sim_size)) return -1;
+    return collider(electron, new_electrons, delta_time, n, capacity, split_chance, remove_chance, rand_state, i, t);
 }

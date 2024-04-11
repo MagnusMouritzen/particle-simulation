@@ -51,33 +51,15 @@ __device__ int collider(Electron* electron, Electron* new_electrons, float delta
             new_i = atomicAdd(n, 1);
         
             if (new_i < capacity){
-
-                if (electron->velocity.x >= 0){
-                    electron->velocity.x += 10;
-                }
-                else{
-                    electron->velocity.x -= 10;
-                }
-
                 Electron added_electron;
-
-                added_electron.position.y = electron->position.y;
-                added_electron.velocity.y = electron->velocity.y;
-                if (electron->velocity.x >= 0){
-                    added_electron.velocity.x = electron->velocity.x - 20;
-                }
-                else{
-                    added_electron.velocity.x = electron->velocity.x + 20;
-                }
-                added_electron.position.x = electron->position.x + added_electron.velocity.x * delta_time;
-                added_electron.position.z = electron->position.z;
-                added_electron.velocity.z = electron->velocity.z;
-                added_electron.weight = electron->weight;
+                added_electron = *electron;
                 added_electron.creator = i;
-                
                 new_electrons[new_i] = added_electron;
             }
         }
+        electron->velocity.x = -electron->velocity.x
+        electron->velocity.y = -electron->velocity.y
+        electron->velocity.z = -electron->velocity.z
     }
     else if (rand < remove_chance + split_chance){
         electron->timestamp = DEAD;

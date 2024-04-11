@@ -113,6 +113,10 @@ __global__ static void gridToParticles(cudaPitchedPtr d_grid, Electron* d_electr
 
     electron.acceleration =  getGridCell(x,y,z).acceleration;
 
+
+    printf("x: %d, y: %d, z: %d \n", x, y, z);
+
+
     d_electrons[i] = electron;
 
 }
@@ -154,6 +158,10 @@ __global__ void updateGrid(cudaPitchedPtr d_grid, double electric_force_constant
     zAcc *= electric_force_constant;
 
     ((Cell*)row)[x].acceleration = make_float3((float)xAcc, (float)yAcc, (float)zAcc);
+
+    if(xAcc != 0 || yAcc != 0 || zAcc != 0) {
+        printf("Update:  x: %d, y: %d, z: %d, acceleration x: %lf, acceleration y: %lf, acceleration z: %lf, acceleration z \n", x, y, z, xAcc, yAcc, zAcc);
+    }
 }
 
 
@@ -183,7 +191,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     Electron* d_electrons;
     cudaMalloc(&d_electrons, 2 * capacity * sizeof(Electron));
     cudaMemset(d_electrons, 0, 2 * capacity * sizeof(Electron));
-    setup_particles<<<(init_n + block_size - 1) / block_size, block_size>>>(d_electrons, d_rand_states, init_n, Sim_Size);
+    setup_particles<<<(init_n + block_size - 1) / block_size, block_size>>>(d_electrons, d_rand_states, init_n, Sim_Size, Grid_Size);
 
     int* n_host = (int*)malloc(sizeof(int));
     int* n;

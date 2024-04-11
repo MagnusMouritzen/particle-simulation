@@ -3,10 +3,13 @@
 
 using namespace std;
 
-__global__ void setup_particles(Electron* d_electrons, curandState* d_rand_states, int init_n, float3 sim_size) {
+__global__ void setup_particles(Electron* d_electrons, curandState* d_rand_states, int init_n, float3 sim_size, int3 grid_size) {
     int i = threadIdx.x+blockDim.x*blockIdx.x;
     if (i >= init_n) return;
-    d_electrons[i].position = make_float3(randFloat(&d_rand_states[i], 0, sim_size.x), randFloat(&d_rand_states[i], 1, sim_size.y), randFloat(&d_rand_states[i], 1, sim_size.z));
+    // d_electrons[i].position = make_float3(randFloat(&d_rand_states[i], 0, sim_size.x), randFloat(&d_rand_states[i], 1, sim_size.y), randFloat(&d_rand_states[i], 1, sim_size.z));
+    d_electrons[i].position = make_float3(randFloat(&d_rand_states[i], (grid_size.x / 2 - 1)*cell_size, (grid_size.x / 2 + 2)*cell_size), 
+                                          randFloat(&d_rand_states[i], (grid_size.y / 2 - 1)*cell_size, (grid_size.y / 2 + 2)*cell_size), 
+                                          randFloat(&d_rand_states[i], (grid_size.z / 2 - 1)*cell_size, (grid_size.z / 2 + 2)*cell_size));
     d_electrons[i].weight = 1.0;
     d_electrons[i].timestamp = -1;
 }
@@ -57,9 +60,9 @@ __device__ int collider(Electron* electron, Electron* new_electrons, float delta
                 new_electrons[new_i] = added_electron;
             }
         }
-        electron->velocity.x = -electron->velocity.x
-        electron->velocity.y = -electron->velocity.y
-        electron->velocity.z = -electron->velocity.z
+        electron->velocity.x = -electron->velocity.x;
+        electron->velocity.y = -electron->velocity.y;
+        electron->velocity.z = -electron->velocity.z;
     }
     else if (rand < remove_chance + split_chance){
         electron->timestamp = DEAD;

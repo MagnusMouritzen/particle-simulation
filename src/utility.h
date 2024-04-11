@@ -37,6 +37,6 @@ double end_cpu_timer(chrono::time_point<high_resolution_clock> start);
 
 void printCSV(const vector<TimingData>& data, string filename);
 
-void checkCudaError();
+void checkCudaError(string context);
 
 void log(int verbose, int t, Electron* electrons_host, Electron* electrons, int* n_host, int* n, int capacity);

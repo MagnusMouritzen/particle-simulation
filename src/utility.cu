@@ -105,10 +105,10 @@ void printCSV(const vector<TimingData>& data, string filename){
     fclose(os);
 }
 
-void checkCudaError() {
+void checkCudaError(string context) {
     cudaError_t error = cudaGetLastError();
     if (error != cudaSuccess) {
-        printf("CUDA error: %s \n", cudaGetErrorString(error));
+        printf("CUDA error: %s\nAt: %s\n", cudaGetErrorString(error), context.c_str());
         throw runtime_error(cudaGetErrorString(error));
         // Handle error appropriately
     }
@@ -126,6 +126,6 @@ void log(int verbose, int t, Electron* electrons_host, Electron* electrons, int*
     image(true_n, electrons_host, t); // visualize a snapshot of the current positions of the particles     
     printf("\n");
 
-    checkCudaError();
+    checkCudaError("Log");
 }
 

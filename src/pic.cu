@@ -214,9 +214,9 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
 
             int source_index = 0;
             int destination_index = 0;
-            int num_blocks_all = (min(*n_host, capacity) + block_size - 1) / block_size;
             for (int t = 0; t < poisson_steps; t++)
             {
+                int num_blocks_all = (min(*n_host, capacity) + block_size - 1) / block_size;
                 source_index = (t % 2) * capacity;  // Flips between 0 and capacity.
                 destination_index = ((t + 1) % 2) * capacity;  // Opposite of above.
 
@@ -225,19 +225,30 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
                 cudaMemset(i_global, 0, sizeof(int));
 
                 resetGrid<<<dim_grid, dim_block>>>(d_grid, Grid_Size);
-                particlesToGrid<<<num_blocks_all, block_size>>>(d_grid, d_electrons, n, Grid_Size);
+                cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
+                checkCudaError("Reset grid");
+                particlesToGrid<<<num_blocks_all, block_size>>>(d_grid, &d_electrons[source_index], n, Grid_Size);
+                cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
+                checkCudaError("Particles to grid");
                 updateGrid<<<dim_grid, dim_block>>>(d_grid, Electric_Force_Constant, Grid_Size);
-                gridToParticles<<<num_blocks_all, block_size>>>(d_grid, d_electrons, n, Grid_Size);
+                cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
+                checkCudaError("Update grid");
+                gridToParticles<<<num_blocks_all, block_size>>>(d_grid, &d_electrons[source_index], n, Grid_Size);
+                cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
+                checkCudaError("Grid to particles");
 
                 poisson<<<num_blocks_pers, block_size>>>(&d_electrons[source_index], 0.0001, n, capacity, split_chance, remove_chance, d_rand_states, poisson_timestep, sleep_time_ns, n_done, i_global, Sim_Size);
                 cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
+                checkCudaError("Poisson");
                 cudaMemset(n, 0, sizeof(int));
                 num_blocks_all = (min(*n_host, capacity) + block_size - 1) / block_size;
+                remove_dead_particles<<<num_blocks_all, block_size>>>(&d_electrons[source_index], &d_electrons[destination_index], n, min(*n_host, capacity));
+                cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
+                checkCudaError("Remove dead");
                 if (*n_host == 0){
                     printf("Hit 0\n");
                     break;
                 }
-                remove_dead_particles<<<num_blocks_all, block_size>>>(&d_electrons[source_index], &d_electrons[destination_index], n, min(*n_host, capacity));
             }
             log(verbose, poisson_steps, h_electrons, &d_electrons[destination_index], n_host, n, capacity);
             
@@ -248,7 +259,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
         default:
             break;
     }
-    checkCudaError();
+    checkCudaError("After sim");
 
     cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
     cudaMemcpy(h_electrons, d_electrons, min(*n_host, capacity) * sizeof(Electron), cudaMemcpyDeviceToHost);   

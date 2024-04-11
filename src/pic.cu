@@ -135,26 +135,25 @@ __global__ void updateGrid(cudaPitchedPtr d_grid, double electric_force_constant
 
     char* slice = gridPtr + z * slicePitch; // get slice 
 
-    Cell* row = (Cell*)(slice + y * pitch); // get row in slice
+    char* row = (slice + y * pitch); // get row in slice
 
 
     double xAcc = 0;
-    if (x != 0) xAcc -= row[x-1].charge;
-    if (x != grid_size.x-1) xAcc += row[x+1].charge;
+    if (x != 0) xAcc -= ((Cell*)row)[x-1].charge;
+    if (x != grid_size.x-1) xAcc += ((Cell*)row)[x+1].charge;
     xAcc *= electric_force_constant;
 
     double yAcc = 0;
-    if (y != 0) yAcc -= (row-pitch)[x].charge;
-    if (y != grid_size.y-1) yAcc += (row+pitch)[x].charge;
+    if (y != 0) yAcc -= ((Cell*)(row - pitch))[x].charge;
+    if (y != grid_size.y-1) yAcc += ((Cell*)(row + pitch))[x].charge;
     yAcc *= electric_force_constant;
 
     double zAcc = 0;
-    if (z != 0) zAcc -= (row-slicePitch)[x].charge;
-    if (z != grid_size.z-1) zAcc += (row+slicePitch)[x].charge;
+    if (z != 0) zAcc -= ((Cell*)(row-slicePitch))[x].charge;
+    if (z != grid_size.z-1) zAcc += ((Cell*)(row+slicePitch))[x].charge;
     zAcc *= electric_force_constant;
 
-    
-    row[x].acceleration = make_float3((float)xAcc, (float)yAcc, (float)zAcc);
+    ((Cell*)row)[x].acceleration = make_float3((float)xAcc, (float)yAcc, (float)zAcc);
 }
 
 
@@ -184,7 +183,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     Electron* d_electrons;
     cudaMalloc(&d_electrons, 2 * capacity * sizeof(Electron));
     cudaMemset(d_electrons, 0, 2 * capacity * sizeof(Electron));
-    setup_particles<<<(init_n + block_size - 1) / block_size, block_size>>>(d_electrons, d_rand_states, init_n);
+    setup_particles<<<(init_n + block_size - 1) / block_size, block_size>>>(d_electrons, d_rand_states, init_n, Sim_Size);
 
     int* n_host = (int*)malloc(sizeof(int));
     int* n;

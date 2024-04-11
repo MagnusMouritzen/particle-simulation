@@ -3,10 +3,10 @@
 
 using namespace std;
 
-__global__ void setup_particles(Electron* d_electrons, curandState* d_rand_states, int init_n) {
+__global__ void setup_particles(Electron* d_electrons, curandState* d_rand_states, int init_n, float3 sim_size) {
     int i = threadIdx.x+blockDim.x*blockIdx.x;
     if (i >= init_n) return;
-    d_electrons[i].position = make_float3(randFloat(&d_rand_states[i], 1, 499), randFloat(&d_rand_states[i], 1, 499), randFloat(&d_rand_states[i], 1, 499));
+    d_electrons[i].position = make_float3(randFloat(&d_rand_states[i], 0, sim_size.x), randFloat(&d_rand_states[i], 1, sim_size.y), randFloat(&d_rand_states[i], 1, sim_size.z));
     d_electrons[i].weight = 1.0;
     d_electrons[i].timestamp = -1;
 }

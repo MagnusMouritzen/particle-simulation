@@ -22,43 +22,95 @@ __device__ __forceinline__ int lanemask_lt() {
     return (1 << lane) - 1;
 }
 
-__device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* rand_state, int i, int start_t, int poisson_timestep, float3 sim_size){
-    Electron electron = d_electrons[i];
-
-    for(int t = start_t; t <= poisson_timestep; t++){
-        int new_i = updateParticle(&electron, d_electrons, deltaTime, n, capacity, split_chance, remove_chance, rand_state, i, t, sim_size);
-        if(new_i != -1 && new_i < capacity) {  // If a new particle was spawned and there is room for it.
-            __threadfence();
-            d_electrons[new_i].timestamp = t;
-            printf("%d: (%d) NEW %d {%f}\n", i, t, new_i, d_electrons[new_i].position.x);
-        }
-        else if (electron.timestamp == DEAD){  // If particle is to be removed.
-            printf("%d: (%d) DEAD\n", i, t);
-            break;
+// These two can go to utility or something
+__device__ void aquireLock(int* lock){
+    if ((threadIdx.x & 31) == 0){
+        while(atomicCAS(lock, 0, 1) != 0){
+            // Sleep
         }
     }
-    if (electron.timestamp != DEAD) electron.timestamp = -1;
+    __syncwarp();
+}
 
-    d_electrons[i] = electron;
+__device__ void releaseLock(int* lock){
+    if ((threadIdx.x & 31) == 0){
+        atomicExch(lock, 0);
+    }
+}
+
+__device__ void uploadElectron(Electron* destination, Electron new_electron){
+    int timestamp = new_electron.timestamp;
+    new_electron.timestamp = 0;
+    *destination = new_electron;
+    __threadfence();
+    destination->timestamp = timestamp;
 }
 
 __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* d_rand_states, int poisson_timestep, int sleep_time_ns, int* n_done, int* i_global, float3 sim_size) {
     int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
+
+    extern __shared__ Electron new_particles_block[];
+    __shared__ int* n_block;
+    __shared__ int* lock;
+
     curandState rand_state =  d_rand_states[thread_id];
 
     Electron electron;
+    Electron new_electron;
+    bool has_new_electron;
     int over_t = poisson_timestep + 1;  // Past the simulation time
     int t = over_t;
     bool needs_new_i = true;
     int i_local = 0;
     bool is_done = false;
 
+    if (threadIdx.x == 0) *n_block = 0;
+    __syncthreads();
+
     while (true){
-        // If all threads in the warp have figured out that they are done, clean up and return.
+        // If all threads in the warp have figured out that they are done, clean up and break.
         int done_mask = __ballot_sync(FULL_MASK, is_done);
         if (done_mask == FULL_MASK){
             d_rand_states[thread_id] = rand_state;
-            return;
+            break;
+        }
+
+        // If anyone has created a new particle, it should be added to the buffer.
+        int has_new_electron_mask = __ballot_sync(~done_mask, has_new_electron);
+        if (has_new_electron_mask != 0){
+            int new_electron_count = __popc(has_new_electron_mask);
+            int rank = __popc(has_new_electron_mask & lanemask_lt());
+            aquireLock(lock);
+            if (new_electron_count + *n_block <= 32){  // Buffer won't overflow, so just add
+                if (has_new_electron){
+                    new_particles_block[*n_block - 1 + rank] = new_electron;
+                }
+                __syncwarp();
+                if ((threadIdx.x & 31) == 0){
+                    atomicAdd(n_block, new_electron_count);
+                }
+                has_new_electron = false;
+            }
+            else{  // Buffer will overflow, so flush before adding.
+                if (has_new_electron && *n_block + rank <= 32){  // Fill it completely before flushing
+                    new_particles_block[*n_block - 1 + rank] = new_electron;
+                    has_new_electron = false;
+                }
+                if (*n < capacity){  // Hopefully this can't cause a desync
+                    int new_i_global;
+                    if ((threadIdx.x & 31) == 0) new_i_global = atomicAdd(n, 32);
+                    new_i_global = __shfl_sync(FULL_MASK, new_i_global, threadIdx.x & (~(31))) + threadIdx.x;
+                    if (new_i_global < capacity){
+                        uploadElectron(&d_electrons[new_i_global], new_particles_block[threadIdx.x]);
+                    }
+                }
+                __syncwarp();
+                if (has_new_electron) new_particles_block[rank - (32 - *n_block)] = new_electron;
+                __syncwarp();
+                if ((threadIdx.x == 0)) atomicExch(n_block, new_electron_count - (32 - *n_block));
+            }
+
+            releaseLock(lock);
         }
 
         // Update i_local for those in need.
@@ -98,12 +150,8 @@ __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, i
 
             if (t != over_t)  // Check needed again because we might not have loaded a new particle
             {
-                int new_i = updateParticle(&electron, d_electrons, deltaTime, n, capacity, split_chance, remove_chance, &rand_state, i_local, t, sim_size);
-                if (new_i != -1 && new_i < capacity){
-                    __threadfence();
-                    d_electrons[new_i].timestamp = t;
-                }
-                else if (++t == over_t || electron.timestamp == DEAD){  // Particle done with this simulation
+                has_new_electron = updateParticle(&electron, &new_electron, deltaTime, split_chance, remove_chance, &rand_state, i_local, t, sim_size);
+                if (++t == over_t || electron.timestamp == DEAD){  // Particle done with this simulation
                     d_electrons[i_local] = electron;
                     t = over_t;
                     needs_new_i = true;
@@ -112,6 +160,20 @@ __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, i
             }
         }
     }
+
+    // Flush buffer to ensure nothing is forgotten.
+    aquireLock(lock);
+    if (*n_block != 0 && *n < capacity){  
+        int new_i_global;
+        if ((threadIdx.x & 31) == 0) new_i_global = atomicAdd(n, *n_block);
+        new_i_global = __shfl_sync(FULL_MASK, new_i_global, threadIdx.x & (~(31))) + threadIdx.x;
+        if (new_i_global < capacity && threadIdx.x < *n_block){
+            uploadElectron(&d_electrons[new_i_global], new_particles_block[threadIdx.x]);
+        }
+        __syncwarp();
+        if ((threadIdx.x == 0)) atomicExch(n_block, 0);
+    }
+    releaseLock(lock);
 }
 
 __global__ static void remove_dead_particles(Electron* d_electrons_old, Electron* d_electrons_new, int* n, int start_n){
@@ -273,6 +335,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     switch(mode){
         case 0: { // GOOD
             timing_data.function = "GOOD";
+            const int sharedMemSize = 32 * sizeof(Electron);
             cudaEventRecord(start);
 
             int source_index = 0;
@@ -300,7 +363,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
                 cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
                 checkCudaError("Grid to particles");
 
-                poisson<<<num_blocks_pers, block_size>>>(&d_electrons[source_index], 0.0001, n, capacity, split_chance, remove_chance, d_rand_states, poisson_timestep, sleep_time_ns, n_done, i_global, Sim_Size);
+                poisson<<<num_blocks_pers, block_size, sharedMemSize>>>(&d_electrons[source_index], 0.0001, n, capacity, split_chance, remove_chance, d_rand_states, poisson_timestep, sleep_time_ns, n_done, i_global, Sim_Size);
                 cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
                 checkCudaError("Poisson");
                 cudaMemset(n, 0, sizeof(int));

@@ -46,20 +46,15 @@ __device__ bool checkOutOfBounds(Electron* electron, float3 sim_size){
      return false;
 }
 
-__device__ int collider(Electron* electron, Electron* new_electrons, float delta_time, int* n, int capacity, float split_chance, float remove_chance, curandState* rand_state, int i, int t){
-    int new_i = -1;
+__device__ bool collider(Electron* electron, Electron* new_electron, float delta_time, float split_chance, float remove_chance, curandState* rand_state, int i, int t){
+    bool spawned_new = false;
     float rand = randFloat(rand_state, 0, 100);
     if (rand < split_chance) {
-        if (*n < capacity) {
-            new_i = atomicAdd(n, 1);
-        
-            if (new_i < capacity){
-                Electron added_electron;
-                added_electron = *electron;
-                added_electron.creator = i;
-                new_electrons[new_i] = added_electron;
-            }
-        }
+        spawned_new = true;
+        *new_electron = *electron;
+        new_electron->creator = i;
+        new_electron->timestamp = t;
+
         electron->velocity.x = -electron->velocity.x;
         electron->velocity.y = -electron->velocity.y;
         electron->velocity.z = -electron->velocity.z;
@@ -67,11 +62,11 @@ __device__ int collider(Electron* electron, Electron* new_electrons, float delta
     else if (rand < remove_chance + split_chance){
         electron->timestamp = DEAD;
     }
-    return new_i;
+    return spawned_new;
 }
 
-__device__ int updateParticle(Electron* electron, Electron* new_electrons, float delta_time, int* n, int capacity, float split_chance, float remove_chance, curandState* rand_state, int i, int t, float3 sim_size) {
+__device__ bool updateParticle(Electron* electron, Electron* new_electron, float delta_time, float split_chance, float remove_chance, curandState* rand_state, int i, int t, float3 sim_size) {
     leapfrog(electron, delta_time);
-    if (checkOutOfBounds(electron, sim_size)) return -1;
-    return collider(electron, new_electrons, delta_time, n, capacity, split_chance, remove_chance, rand_state, i, t);
+    if (checkOutOfBounds(electron, sim_size)) return false;
+    return collider(electron, new_electron, delta_time, split_chance, remove_chance, rand_state, i, t);
 }

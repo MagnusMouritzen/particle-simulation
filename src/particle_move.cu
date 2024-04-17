@@ -66,7 +66,6 @@ __device__ int collider(Electron* electron, Electron* new_electrons, float delta
     }
     else if (rand < remove_chance + split_chance){
         electron->timestamp = DEAD;
-        return new_i;
     }
     return new_i;
 }

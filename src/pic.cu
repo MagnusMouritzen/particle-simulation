@@ -44,28 +44,73 @@ __device__ static void simulateMany(Electron* d_electrons, float deltaTime, int*
 
 __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* d_rand_states, int poisson_timestep, int sleep_time_ns, int* n_done, int* i_global, float3 sim_size) {
     int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
-    while (true) {
-        __syncthreads(); //sync threads seems to be able to handle threads being terminated
-        if (threadIdx.x==0) {
-            i_block = atomicAdd(i_global, blockDim.x);
-        }
-        __syncthreads();
+    curandState rand_state =  d_rand_states[thread_id];
 
-        int i = i_block + threadIdx.x;
+    Electron electron;
+    int over_t = poisson_timestep + 1;  // Past the simulation time
+    int t = over_t;
+    bool needs_new_i = true;
+    int i_local = 0;
+    bool is_done = false;
 
-        if (i >= capacity) break;
-
-        while (d_electrons[i].timestamp == 0 || i >= *n) {
-            int cur_n_done = *n_done;
-            __threadfence();
-            int cur_n = *n;
-            if (cur_n==cur_n_done) return;
-            __nanosleep(sleep_time_ns);
+    while (true){
+        // If all threads in the warp have figured out that they are done, clean up and return.
+        int done_mask = __ballot_sync(FULL_MASK, is_done);
+        if (done_mask == FULL_MASK){
+            d_rand_states[thread_id] = rand_state;
+            return;
         }
 
-        simulateMany(d_electrons, deltaTime, n, capacity, split_chance, remove_chance, &d_rand_states[thread_id], i, max(1, d_electrons[i].timestamp + 1), poisson_timestep, sim_size);
-        atomicAdd(n_done,1);
+        // Update i_local for those in need.
+        int needs_new_i_mask = __ballot_sync(~done_mask, needs_new_i);
+        int needs_new_i_count = __popc(needs_new_i_mask);
+        if (needs_new_i_count != 0){
+            if (needs_new_i_count == 1){
+                i_local = atomicAdd(i_global, 1);
+            }
+            else{
+                int leader = __ffs(needs_new_i_mask) - 1;
+                if ((threadIdx.x & 31) == leader){
+                    i_local = atomicAdd(i_global, needs_new_i_count);
+                }
+                int rank = __popc(needs_new_i_mask & lanemask_lt());
+                i_local = __shfl_sync(needs_new_i_mask, i_local, leader) + rank;
+            }
+            needs_new_i = false;
+        }
 
+
+        if (!is_done){
+            if (t == over_t){  // We don't have a particle and must load a new one
+                if (i_local < *n && d_electrons[i_local].timestamp != 0){  // Check if the particle we are looking at is ready yet
+                    electron = d_electrons[i_local];
+                    t =  max(1, electron.timestamp + 1);
+                }
+                else{  // Check if we are done with the simulation
+                    int cur_n_done = *n_done;
+                    __threadfence();
+                    int cur_n = *n;
+                    if (cur_n == cur_n_done) {
+                        is_done = true;
+                    }
+                }
+            }
+
+            if (t != over_t)  // Check needed again because we might not have loaded a new particle
+            {
+                int new_i = updateParticle(&electron, d_electrons, deltaTime, n, capacity, split_chance, remove_chance, &rand_state, i_local, t, sim_size);
+                if (new_i != -1 && new_i < capacity){
+                    __threadfence();
+                    d_electrons[new_i].timestamp = t;
+                }
+                else if (++t == over_t || electron.timestamp == DEAD){  // Particle done with this simulation
+                    d_electrons[i_local] = electron;
+                    t = over_t;
+                    needs_new_i = true;
+                    atomicAdd(n_done,1);
+                }
+            }
+        }
     }
 }
 

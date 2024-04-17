@@ -6,6 +6,9 @@
 
 #include "pic.h"
 
+#define FULL_MASK 0xffffffff
+
+
 __shared__ int i_block;
 __shared__ int capacity;
 
@@ -14,7 +17,10 @@ __shared__ int new_i_block;
 
 
 #define getGridCell(x,y,z) (((Cell*)((((char*)d_grid.ptr) + z * (d_grid.pitch * grid_size.y)) + y * d_grid.pitch))[x])
-
+__device__ __forceinline__ int lanemask_lt() {
+    int lane = threadIdx.x & 31;
+    return (1 << lane) - 1;
+}
 
 __device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* rand_state, int i, int start_t, int poisson_timestep, float3 sim_size){
     Electron electron = d_electrons[i];
@@ -65,15 +71,25 @@ __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, i
 
 __global__ static void remove_dead_particles(Electron* d_electrons_old, Electron* d_electrons_new, int* n, int start_n){
     int i = blockIdx.x * blockDim.x + threadIdx.x;
+    // int mask = __ballot_sync(FULL_MASK, i >= start_n);
+    bool alive = (i < start_n) && (d_electrons_old[i].timestamp != DEAD);
+    int alive_mask = __ballot_sync(FULL_MASK, alive);
+
     if (i >= start_n) return;
 
     if (threadIdx.x == 0) n_block = 0;
     __syncthreads();
 
-    int i_local = -1;
-    if (d_electrons_old[i].timestamp != DEAD){
-        i_local = atomicAdd(&n_block, 1);
+    int count = __popc(alive_mask);
+    int leader = __ffs(alive_mask) - 1;
+    int rank = __popc(alive_mask & lanemask_lt());
+
+    int i_local = 0;
+    if((threadIdx.x & 31) == leader) {
+        i_local = atomicAdd(&n_block, count);
     }
+    i_local = __shfl_sync(alive_mask, i_local, leader);
+    i_local += rank;
 
     __syncthreads();
     if (threadIdx.x == 0){
@@ -81,7 +97,7 @@ __global__ static void remove_dead_particles(Electron* d_electrons_old, Electron
     }
     __syncthreads();
 
-    if (i_local == -1) return;
+    if (!alive) return;
     d_electrons_new[i_block + i_local] = d_electrons_old[i];
 }
 
@@ -117,6 +133,7 @@ __global__ static void gridToParticles(cudaPitchedPtr d_grid, Electron* d_electr
     d_electrons[i] = electron;
 
 }
+
 __global__ void resetGrid(cudaPitchedPtr d_grid, int3 grid_size) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -124,6 +141,7 @@ __global__ void resetGrid(cudaPitchedPtr d_grid, int3 grid_size) {
     
     getGridCell(x,y,z).charge = 0;
 }
+
 __global__ void updateGrid(cudaPitchedPtr d_grid, double electric_force_constant, int3 grid_size) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;

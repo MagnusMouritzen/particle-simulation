@@ -30,10 +30,10 @@ __device__ static void simulateMany(Electron* d_electrons, float deltaTime, int*
         if(new_i != -1 && new_i < capacity) {  // If a new particle was spawned and there is room for it.
             __threadfence();
             d_electrons[new_i].timestamp = t;
-            printf("%d: (%d) NEW %d {%f}\n", i, t, new_i, d_electrons[new_i].position.x);
+            // printf("%d: (%d) NEW %d {%f}\n", i, t, new_i, d_electrons[new_i].position.x);
         }
         else if (electron.timestamp == DEAD){  // If particle is to be removed.
-            printf("%d: (%d) DEAD\n", i, t);
+            // printf("%d: (%d) DEAD\n", i, t);
             break;
         }
     }
@@ -71,7 +71,6 @@ __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, i
 
 __global__ static void remove_dead_particles(Electron* d_electrons_old, Electron* d_electrons_new, int* n, int start_n){
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    // int mask = __ballot_sync(FULL_MASK, i >= start_n);
     bool alive = (i < start_n) && (d_electrons_old[i].timestamp != DEAD);
     int alive_mask = __ballot_sync(FULL_MASK, alive);
 
@@ -186,14 +185,17 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     timing_data.block_size = block_size;
     timing_data.sleep_time = sleep_time_ns;
     timing_data.split_chance = split_chance;
-    
 
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
 
+    int num_blocks;
     int num_blocks_pers;
-    cudaDeviceGetAttribute(&num_blocks_pers, cudaDevAttrMultiProcessorCount, 0);
+    size_t dynamics_size = 16;
+    cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
+    cudaOccupancyMaxActiveBlocksPerMultiprocessor(&num_blocks_pers, poisson, block_size, dynamics_size);
+    num_blocks_pers *= num_blocks; 
 
     curandState* d_rand_states;
     cudaMalloc(&d_rand_states, num_blocks_pers * block_size * sizeof(curandState));

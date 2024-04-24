@@ -66,7 +66,7 @@ __device__ bool collider(Electron* electron, Electron* new_electron, float delta
 }
 
 __device__ bool updateParticle(Electron* electron, Electron* new_electron, float delta_time, float split_chance, float remove_chance, curandState* rand_state, int i, int t, float3 sim_size) {
-    leapfrog(electron, delta_time);
+    //leapfrog(electron, delta_time);
     if (checkOutOfBounds(electron, sim_size)) return false;
     return collider(electron, new_electron, delta_time, split_chance, remove_chance, rand_state, i, t);
 }

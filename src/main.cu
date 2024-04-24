@@ -19,13 +19,15 @@ int main(int argc, char **argv) {
 
     int max_n = boost::lexical_cast<int>(argv[6]);
     int sleep_time = boost::lexical_cast<int>(argv[7]);
-    float split_chance = boost::lexical_cast<float>(argv[8]);
-    float remove_chance = boost::lexical_cast<float>(argv[9]);
-    int poisson_timestep = boost::lexical_cast<int>(argv[10]);
+    int poisson_timestep = boost::lexical_cast<int>(argv[8]);
     
     // PIC
     if (!strcmp(argv[1], "30")){ // PIC GOOD
-        runPIC(init_n, max_n, max_t, poisson_timestep, 0, verbose, block_size, sleep_time, split_chance, remove_chance);
+        runPIC(init_n, max_n, max_t, poisson_timestep, 0, verbose, block_size, sleep_time);
+    }
+    // CPUSynch
+    if (!strcmp(argv[1], "31")){ // CPUSynch
+        runPIC(init_n, max_n, max_t, poisson_timestep, 1, verbose, block_size, sleep_time);
     }
     double time = end_cpu_timer(start);
     printf("CPU time of program: %f ms\n", time);

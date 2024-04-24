@@ -2,7 +2,7 @@
 
 #include "electron.h"
 
-#define cell_size 8.3e-3
+#define cell_size 8.3e-2
 #define epsilon0 8.8541878176E-12
 #define pi 3.1415926536
 

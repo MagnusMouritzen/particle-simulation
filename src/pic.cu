@@ -3,7 +3,6 @@
 #include <cstring>
 #include <math.h>
 #include <stdexcept>
-
 #include "pic.h"
 
 #define FULL_MASK 0xffffffff
@@ -22,11 +21,11 @@ __device__ __forceinline__ int lanemask_lt() {
     return (1 << lane) - 1;
 }
 
-__device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* rand_state, int i, int start_t, int poisson_timestep, float3 sim_size){
+__device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* rand_state, int i, int start_t, int poisson_timestep, float3 sim_size, CSData* d_cross_sections){
     Electron electron = d_electrons[i];
 
     for(int t = start_t; t <= poisson_timestep; t++){
-        int new_i = updateParticle(&electron, d_electrons, deltaTime, n, capacity, split_chance, remove_chance, rand_state, i, t, sim_size);
+        int new_i = updateParticle(&electron, d_electrons, deltaTime, n, capacity, split_chance, remove_chance, rand_state, i, t, sim_size, d_cross_sections);
         if(new_i != -1 && new_i < capacity) {  // If a new particle was spawned and there is room for it.
             __threadfence();
             d_electrons[new_i].timestamp = t;
@@ -42,7 +41,7 @@ __device__ static void simulateMany(Electron* d_electrons, float deltaTime, int*
     d_electrons[i] = electron;
 }
 
-__global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* d_rand_states, int poisson_timestep, int sleep_time_ns, int* n_done, int* i_global, float3 sim_size) {
+__global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* d_rand_states, int poisson_timestep, int sleep_time_ns, int* n_done, int* i_global, float3 sim_size, CSData* d_cross_sections) {
     int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
     while (true) {
         __syncthreads(); //sync threads seems to be able to handle threads being terminated
@@ -63,7 +62,7 @@ __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, i
             __nanosleep(sleep_time_ns);
         }
 
-        simulateMany(d_electrons, deltaTime, n, capacity, split_chance, remove_chance, &d_rand_states[thread_id], i, max(1, d_electrons[i].timestamp + 1), poisson_timestep, sim_size);
+        simulateMany(d_electrons, deltaTime, n, capacity, split_chance, remove_chance, &d_rand_states[thread_id], i, max(1, d_electrons[i].timestamp + 1), poisson_timestep, sim_size, d_cross_sections);
         atomicAdd(n_done,1);
 
     }
@@ -190,6 +189,14 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
 
+    CSData* cross_sections = (CSData*)malloc(sizeof(CSData)*11);
+    ProcessCSData(cross_sections, 11, "/zhome/b5/3/156408/Desktop/particle-simulation/src/cross_section.txt");
+
+    
+    CSData* d_cross_sections;
+    cudaMalloc(&d_cross_sections, 11 * sizeof(CSData));
+    cudaMemcpy(d_cross_sections, cross_sections, 11 * sizeof(CSData), cudaMemcpyHostToDevice);
+
     int num_blocks;
     int num_blocks_pers;
     size_t dynamics_size = 16;
@@ -257,7 +264,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
                 cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
                 checkCudaError("Grid to particles");
 
-                poisson<<<num_blocks_pers, block_size>>>(&d_electrons[source_index], 0.0001, n, capacity, split_chance, remove_chance, d_rand_states, poisson_timestep, sleep_time_ns, n_done, i_global, Sim_Size);
+                poisson<<<num_blocks_pers, block_size>>>(&d_electrons[source_index], 0.0001, n, capacity, split_chance, remove_chance, d_rand_states, poisson_timestep, sleep_time_ns, n_done, i_global, Sim_Size, d_cross_sections);
                 cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
                 checkCudaError("Poisson");
                 cudaMemset(n, 0, sizeof(int));

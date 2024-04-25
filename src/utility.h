@@ -39,4 +39,6 @@ void printCSV(const vector<TimingData>& data, string filename);
 
 void checkCudaError(string context);
 
+void checkCudaErrorCont(string context);
+
 void log(int verbose, int t, Electron* electrons_host, Electron* electrons, int* n_host, int* n, int capacity);

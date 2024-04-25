@@ -236,15 +236,20 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     cudaMemcpy(d_cross_sections, cross_sections, 11 * sizeof(CSData), cudaMemcpyHostToDevice);
 
     int num_blocks;
+
     int num_blocks_pers;
     size_t dynamics_size = 16;
     cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
     cudaOccupancyMaxActiveBlocksPerMultiprocessor(&num_blocks_pers, poisson, block_size, dynamics_size);
     num_blocks_pers *= num_blocks; 
 
+    int num_blocks_rand;
+    if (mode == 0) num_blocks_rand = num_blocks_pers;
+    else num_blocks_rand = (capacity + block_size - 1) / block_size;  // If not using persistent kernel, we don't know how many threads there will be. It can be up to cap.
+
     curandState* d_rand_states;
-    cudaMalloc(&d_rand_states, num_blocks_pers * block_size * sizeof(curandState));
-    setup_rand<<<num_blocks_pers, block_size>>>(d_rand_states);  // This has to be done before setup_particles
+    cudaMalloc(&d_rand_states, num_blocks_rand * block_size * sizeof(curandState));
+    setup_rand<<<num_blocks_rand, block_size>>>(d_rand_states);  // This has to be done before setup_particles
     
     Electron* h_electrons = (Electron *)calloc(capacity, sizeof(Electron));
     Electron* d_electrons;

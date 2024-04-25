@@ -114,6 +114,13 @@ void checkCudaError(string context) {
     }
 }
 
+void checkCudaErrorCont(string context){
+    cudaError_t error = cudaGetLastError();
+    if (error != cudaSuccess) {
+        printf("CUDA error: %s\nAt: %s\n", cudaGetErrorString(error), context.c_str());
+    }
+}
+
 void log(int verbose, int t, Electron* electrons_host, Electron* electrons, int* n_host, int* n, int capacity){
     if (verbose == 0 || t % verbose != 0) return;
     cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);

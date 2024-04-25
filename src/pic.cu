@@ -3,7 +3,6 @@
 #include <cstring>
 #include <math.h>
 #include <stdexcept>
-
 #include "pic.h"
 
 #define FULL_MASK 0xffffffff
@@ -66,7 +65,7 @@ __device__ void flush_buffer(Electron* d_electrons, Electron* new_particles_bloc
     releaseLock(&buffer_lock);
 }
 
-__global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, float remove_chance, curandState* d_rand_states, int poisson_timestep, int sleep_time_ns, int* n_created, int* n_done, int* i_global, float3 sim_size) {
+__global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, int capacity, curandState* d_rand_states, int poisson_timestep, int sleep_time_ns, int* n_created, int* n_done, int* i_global, float3 sim_size, CSData* d_cross_sections) {
     int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
     extern __shared__ Electron new_particles_block[];
 
@@ -195,7 +194,7 @@ __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, i
 
             if (t != over_t)  // Check needed again because we might not have loaded a new particle
             {
-                has_new_electron = updateParticle(&electron, &new_electron, deltaTime, split_chance, remove_chance, &rand_state, i_local, t, sim_size);
+                has_new_electron = updateParticle(&electron, &new_electron, deltaTime, &rand_state, i_local, t, sim_size, d_cross_sections);
                 if (has_new_electron) atomicAdd(n_created, 1);
                 if (++t == over_t || electron.timestamp == DEAD){  // Particle done with this simulation
                     d_electrons[i_local] = electron;
@@ -220,7 +219,6 @@ __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, i
 
 __global__ static void remove_dead_particles(Electron* d_electrons_old, Electron* d_electrons_new, int* n, int start_n){
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    // int mask = __ballot_sync(FULL_MASK, i >= start_n);
     bool alive = (i < start_n) && (d_electrons_old[i].timestamp != DEAD);
     int alive_mask = __ballot_sync(FULL_MASK, alive);
 
@@ -326,28 +324,117 @@ __global__ void updateGrid(cudaPitchedPtr d_grid, double electric_force_constant
 
 }
 
+__global__ static void naive(Electron* d_electrons, float deltaTime, int* n, int start_n, int capacity, curandState* d_rand_states, int t, float3 sim_size, CSData* d_cross_sections) {
 
-RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timestep, int mode, int verbose, int block_size, int sleep_time_ns, float split_chance, float remove_chance) {
-    printf("MVP with\ninit n: %d\ncapacity: %d\npoisson steps: %d\npoisson_timestep: %d\nblock size: %d\nsleep time: %d\nsplit chance: %f\nremove chance: %f\n", init_n, capacity, poisson_steps, poisson_timestep, block_size, sleep_time_ns, split_chance, remove_chance);
+    extern __shared__ Electron  new_particles_block[];
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (threadIdx.x == 0) n_block = 0;
+
+    __syncthreads(); // Ensure construction is finished
+    
+    // The thread index has passed the number of d_electrons. Thread returns if all electron are being handled
+    if (i >= start_n) return;
+
+    Electron electron = d_electrons[i];
+    if (electron.timestamp != DEAD){
+        Electron new_electron;
+        if (updateParticle(&electron, &new_electron, deltaTime, &d_rand_states[i], i, t, sim_size, d_cross_sections)){
+            int new_i = atomicAdd(&n_block, 1);
+            new_electron.timestamp = 0;
+            new_particles_block[new_i] = new_electron;
+        }
+        d_electrons[i] = electron;
+    }
+
+    __syncthreads();
+
+    if (threadIdx.x == 0){
+        if (*n < capacity) new_i_block = atomicAdd(n, n_block);  // Avoid risk of n overflowing int max value
+        else new_i_block = capacity;
+    }
+
+    __syncthreads();
+
+    if (threadIdx.x >= n_block) return;
+    int global_i = new_i_block + threadIdx.x;
+    if (global_i >= capacity) return;
+    newRandState(d_rand_states, global_i, randInt(&d_rand_states[new_particles_block[threadIdx.x].creator], 0, 10000));
+    d_electrons[global_i] = new_particles_block[threadIdx.x];
+    d_electrons[global_i].timestamp = t;
+}
+
+__device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, curandState* rand_state, int i, int start_t, int poisson_timestep, float3 sim_size, CSData* d_cross_sections){
+    Electron electron = d_electrons[i];
+    Electron new_electron;
+
+    for(int t = start_t; t <= poisson_timestep; t++){
+        if (updateParticle(&electron, d_electrons, deltaTime, rand_state, i, t, sim_size, d_cross_sections)){
+            if (*n < capacity){
+                int new_i = atomicAdd(n, 1);
+                if (new_i < capacity){
+                    int timestamp = new_electron.timestamp;
+                    new_electron.timestamp = 0;
+                    d_electrons[new_i] = new_electron;
+                    __threadfence();
+                    d_electrons[new_i].timestamp = timestamp;
+                }
+            }
+        }
+        else if (electron.timestamp == DEAD){  // If particle is to be removed.
+            // printf("%d: (%d) DEAD\n", i, t);
+            break;
+        }
+    }
+
+    d_electrons[i] = electron;
+}
+
+__global__ static void cpuSynch(Electron* d_electrons, float deltaTime, int* n, int start_n, int offset, int capacity, curandState* d_rand_states, int poisson_timestep, float3 sim_size, CSData* d_cross_sections) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x + offset;
+
+    // The thread index has passed the number of d_electrons. Thread returns if all electron are being handled
+    if (i >= start_n) return;
+    simulateMany(d_electrons, deltaTime, n, capacity, &d_rand_states[i], i, max(1, d_electrons[i].timestamp + 1), poisson_timestep, sim_size, d_cross_sections);
+}
+
+RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timestep, int mode, int verbose, int block_size, int sleep_time_ns) {
+    printf("MVP with\ninit n: %d\ncapacity: %d\npoisson steps: %d\npoisson_timestep: %d\nblock size: %d\nsleep time: %d\n", init_n, capacity, poisson_steps, poisson_timestep, block_size, sleep_time_ns);
 
     TimingData timing_data;
     timing_data.init_n = init_n;
     timing_data.iterations = poisson_steps;
     timing_data.block_size = block_size;
     timing_data.sleep_time = sleep_time_ns;
-    timing_data.split_chance = split_chance;
-    
 
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
 
+    CSData* cross_sections = (CSData*)malloc(sizeof(CSData)*11);
+    ProcessCSData(cross_sections, 11, "./src/cross_section.txt");
+
+    
+    CSData* d_cross_sections;
+    cudaMalloc(&d_cross_sections, 11 * sizeof(CSData));
+    cudaMemcpy(d_cross_sections, cross_sections, 11 * sizeof(CSData), cudaMemcpyHostToDevice);
+
+    int num_blocks;
+
     int num_blocks_pers;
-    cudaDeviceGetAttribute(&num_blocks_pers, cudaDevAttrMultiProcessorCount, 0);
+    size_t dynamics_size = 16;
+    cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
+    cudaOccupancyMaxActiveBlocksPerMultiprocessor(&num_blocks_pers, poisson, block_size, dynamics_size);
+    num_blocks_pers *= num_blocks; 
+
+    int num_blocks_rand;
+    if (mode == 0) num_blocks_rand = num_blocks_pers;
+    else num_blocks_rand = (capacity + block_size - 1) / block_size;  // If not using persistent kernel, we don't know how many threads there will be. It can be up to cap.
 
     curandState* d_rand_states;
-    cudaMalloc(&d_rand_states, num_blocks_pers * block_size * sizeof(curandState));
-    setup_rand<<<num_blocks_pers, block_size>>>(d_rand_states);  // This has to be done before setup_particles
+    cudaMalloc(&d_rand_states, num_blocks_rand * block_size * sizeof(curandState));
+    setup_rand<<<num_blocks_rand, block_size>>>(d_rand_states);  // This has to be done before setup_particles
     
     Electron* h_electrons = (Electron *)calloc(capacity, sizeof(Electron));
     Electron* d_electrons;
@@ -410,7 +497,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
                 cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
                 checkCudaError("Grid to particles");
 
-                poisson<<<num_blocks_pers, block_size, sharedMemSize>>>(&d_electrons[source_index], 0.0001, n, capacity, split_chance, remove_chance, d_rand_states, poisson_timestep, sleep_time_ns, n_created, n_done, i_global, Sim_Size);
+                poisson<<<num_blocks_pers, block_size, sharedMemSize>>>(&d_electrons[source_index], 0.0001, n, capacity, d_rand_states, poisson_timestep, sleep_time_ns, n_created, n_done, i_global, Sim_Size, d_cross_sections);
                 cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
                 checkCudaError("Poisson");
                 cudaMemset(n, 0, sizeof(int));
@@ -427,6 +514,110 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
             log(verbose, poisson_steps, h_electrons, &d_electrons[destination_index], n_host, n, capacity);
             
             
+            cudaEventRecord(stop);
+            break;
+        }
+        case 1: {
+            timing_data.function = "CPU Sync";
+            cudaEventRecord(start);
+
+            int source_index = 0;
+            int destination_index = 0;
+            for (int t = 0; t < poisson_steps; t++) {
+
+                int num_blocks_all = (min(*n_host, capacity) + block_size - 1) / block_size;
+                source_index = (t % 2) * capacity;  // Flips between 0 and capacity.
+                destination_index = ((t + 1) % 2) * capacity;  // Opposite of above.
+
+                log(verbose, t, h_electrons, &d_electrons[source_index], n_host, n, capacity);
+                cudaMemset(n_done, 0, sizeof(int));
+                cudaMemset(i_global, 0, sizeof(int));
+
+                resetGrid<<<dim_grid, dim_block>>>(d_grid, Grid_Size);
+                cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
+                checkCudaError("Reset grid");
+                particlesToGrid<<<num_blocks_all, block_size>>>(d_grid, &d_electrons[source_index], n, Grid_Size);
+                cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
+                checkCudaError("Particles to grid");
+                updateGrid<<<dim_grid, dim_block>>>(d_grid, Electric_Force_Constant, Grid_Size);
+                cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
+                checkCudaError("Update grid");
+                gridToParticles<<<num_blocks_all, block_size>>>(d_grid, &d_electrons[source_index], n, Grid_Size);
+                cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
+                checkCudaError("Grid to particles");
+
+
+                int last_n = 0;  // The amount of particles present in last run. All of these have been fully simulated.
+                while(min(*n_host, capacity) != last_n){  // Stop once nothing new has happened.
+                    int num_blocks = (min(*n_host, capacity) - last_n + block_size - 1) / block_size;  // We do not need blocks for the old particles.
+                    cpuSynch<<<num_blocks, block_size>>>(&d_electrons[source_index], 0.0001, n, min(*n_host, capacity), last_n, capacity, d_rand_states, poisson_timestep, Sim_Size, d_cross_sections);
+                    last_n = min(*n_host, capacity);  // Update last_n to the amount just run. NOT to the amount after this run (we don't know that amount yet).
+                    cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Now update to the current amount of particles.
+                }
+
+                checkCudaError("Poisson");
+                cudaMemset(n, 0, sizeof(int));
+                num_blocks_all = (min(*n_host, capacity) + block_size - 1) / block_size;
+                remove_dead_particles<<<num_blocks_all, block_size>>>(&d_electrons[source_index], &d_electrons[destination_index], n, min(*n_host, capacity));
+                cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
+                checkCudaError("Remove dead");
+                if (*n_host == 0) {
+                    printf("Hit 0\n");
+                    break;
+                }
+            }
+            cudaEventRecord(stop);
+            break;
+        }
+        case 2: {
+            timing_data.function = "Naive";
+            const int sharedMemSize = block_size * sizeof(Electron);
+            cudaEventRecord(start);
+
+            int source_index = 0;
+            int destination_index = 0;
+            for (int t = 0; t < poisson_steps; t++) {
+                int num_blocks_all = (min(*n_host, capacity) + block_size - 1) / block_size;
+                source_index = (t % 2) * capacity;  // Flips between 0 and capacity.
+                destination_index = ((t + 1) % 2) * capacity;  // Opposite of above.
+
+                log(verbose, t, h_electrons, &d_electrons[source_index], n_host, n, capacity);
+                cudaMemset(n_done, 0, sizeof(int));
+                cudaMemset(i_global, 0, sizeof(int));
+
+                resetGrid<<<dim_grid, dim_block>>>(d_grid, Grid_Size);
+                cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
+                checkCudaError("Reset grid");
+                particlesToGrid<<<num_blocks_all, block_size>>>(d_grid, &d_electrons[source_index], n, Grid_Size);
+                cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
+                checkCudaError("Particles to grid");
+                updateGrid<<<dim_grid, dim_block>>>(d_grid, Electric_Force_Constant, Grid_Size);
+                cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
+                checkCudaError("Update grid");
+                gridToParticles<<<num_blocks_all, block_size>>>(d_grid, &d_electrons[source_index], n, Grid_Size);
+                cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
+                checkCudaError("Grid to particles");
+
+
+                for (int t = 1; t <= poisson_timestep; t++){
+                    int num_blocks = (min(*n_host, capacity) + block_size - 1) / block_size;
+                    naive<<<num_blocks, block_size, sharedMemSize>>>(&d_electrons[source_index], 0.0001, n, min(*n_host, capacity), capacity, d_rand_states, t, Sim_Size, d_cross_sections);
+                    log(verbose, t, h_electrons, d_electrons, n_host, n, capacity);
+                    cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
+                }
+
+                checkCudaError("Poisson");
+                cudaMemset(n, 0, sizeof(int));
+                num_blocks_all = (min(*n_host, capacity) + block_size - 1) / block_size;
+                remove_dead_particles<<<num_blocks_all, block_size>>>(&d_electrons[source_index], &d_electrons[destination_index], n, min(*n_host, capacity));
+                cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
+                checkCudaError("Remove dead");
+                if (*n_host == 0) {
+                    printf("Hit 0\n");
+                    break;
+                }
+            }
+
             cudaEventRecord(stop);
             break;
         }

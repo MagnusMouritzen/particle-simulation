@@ -48,7 +48,6 @@ __device__ void uploadElectron(Electron* destination, Electron new_electron, int
     *destination = new_electron;
     __threadfence();
     destination->timestamp = timestamp;
-    //printf("pushed new electron to %d\n", test_i);
 }
 
 __device__ void flush_buffer(Electron* d_electrons, Electron* new_particles_block, int* n, int capacity){
@@ -91,14 +90,12 @@ __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, i
         // If all threads in the warp have figured out that they are done, clean up and break.
         int done_mask = __ballot_sync(FULL_MASK, is_done);
         if (done_mask == FULL_MASK){
-            //printf("%d warp done\n", thread_id);
             d_rand_states[thread_id] = rand_state;
             break;
         }
 
         int wants_to_flush_mask = __ballot_sync(FULL_MASK, wants_to_flush);
         if (wants_to_flush_mask == FULL_MASK){
-            //printf("%d [%d] Doing a flush.\n", thread_id, blockIdx.x);
             flush_buffer(d_electrons, new_particles_block, n, capacity);
         }
         wants_to_flush = false;
@@ -106,14 +103,11 @@ __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, i
         // If anyone has created a new particle, it should be added to the buffer.
         int has_new_electron_mask = __ballot_sync(~done_mask, has_new_electron);
         if (has_new_electron_mask != 0){
-            //printf("%d [%d] New electrons to be added %x, %x. %d.\n", thread_id, blockIdx.x, has_new_electron_mask, has_new_electron, i_local);
             int new_electron_count = __popc(has_new_electron_mask);
             int rank = __popc(has_new_electron_mask & lanemask_lt());
             aquireLock(&buffer_lock);
             int cur_n_block = atomicAdd(&n_block, 0);
-            //printf("%d [%d] entered critical section, want to add %d new particles. Buffer has %d\n", thread_id, blockIdx.x, new_electron_count, cur_n_block);
             if (new_electron_count + cur_n_block <= 32){  // Buffer won't overflow, so just add
-                //printf("%d [%d] can just add\n", thread_id, blockIdx.x);
                 if (has_new_electron){
                     new_particles_block[cur_n_block + rank] = new_electron;
                 }
@@ -124,9 +118,7 @@ __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, i
                 has_new_electron = false;
             }
             else{  // Buffer will overflow, so flush before adding.
-                //printf("%d [%d] will overflow\n", thread_id, blockIdx.x);
                 if (has_new_electron && cur_n_block + rank < 32){  // Fill it completely before flushing
-                    //printf("%d [%d] (%d) won't, though\n", thread_id, blockIdx.x, LANE);
                     new_particles_block[cur_n_block + rank] = new_electron;
                     has_new_electron = false;
                 }
@@ -134,7 +126,6 @@ __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, i
                     int new_i_global;
                     if (LANE == 0) new_i_global = atomicAdd(n, 32);
                     new_i_global = __shfl_sync(FULL_MASK, new_i_global, 0) + LANE;
-                    //printf("%d [%d] (%d) got new i global %d\n", thread_id, blockIdx.x, LANE, new_i_global);
                     if (new_i_global < capacity){
                         uploadElectron(&d_electrons[new_i_global], new_particles_block[LANE], new_i_global);
                     }
@@ -145,7 +136,6 @@ __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, i
                 __syncwarp();
                 if ((LANE == 0)) atomicExch(&n_block, new_electron_count - (32 - cur_n_block));
             }
-            //printf("%d [%d] will leave critical section. Buffer is now %d\n", thread_id, blockIdx.x, n_block);
             releaseLock(&buffer_lock);
         }
 
@@ -153,7 +143,6 @@ __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, i
         int needs_new_i_mask = __ballot_sync(~done_mask, needs_new_i);
         int needs_new_i_count = __popc(needs_new_i_mask);
         if (needs_new_i){
-            //printf("%d [%d] Someone needs new i. %x, %x.\n", thread_id, blockIdx.x, needs_new_i_mask, needs_new_i);
             if (needs_new_i_count == 1){
                 i_local = atomicAdd(i_global, 1);
             }
@@ -165,24 +154,24 @@ __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, i
                 int rank = __popc(needs_new_i_mask & lanemask_lt());
                 i_local = __shfl_sync(needs_new_i_mask, i_local, leader) + rank;
             }
-            //printf("%d [%d] Got new local i: %d\n", thread_id, blockIdx.x, i_local);
             needs_new_i = false;
         }
 
 
         if (!is_done){
             if (t == over_t){  // We don't have a particle and must load a new one
-                if (i_local < *n && d_electrons[i_local].timestamp != 0){  // Check if the particle we are looking at is ready yet
+                if (WARP != 0 && i_local >= capacity){
+                    is_done = true;
+                }
+                else if (i_local < min(*n, capacity) && d_electrons[i_local].timestamp != 0){  // Check if the particle we are looking at is ready yet
                     if (d_electrons[i_local].timestamp == over_t-1){  // This new electron was spawned at the very end and needs no more.
                         needs_new_i = true;
                         __threadfence();
                         int test = atomicAdd(n_done,1);
-                        //printf("%d [%d] is done working on a particle (just made). n done %d\n", thread_id, blockIdx.x, test+1);
                     }
                     else{
                         electron = d_electrons[i_local];
                         t =  max(1, electron.timestamp + 1);
-                        //printf("%d [%d] is ready to gooooo with local i %d. Needs i %x. t %d.\n", thread_id, blockIdx.x, i_local, needs_new_i, t);
                     }
                 }
                 else{  // Check if we are done with the simulation
@@ -191,7 +180,6 @@ __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, i
                     int cur_n_created = min(capacity, atomicAdd(n_created, 0));
                     if (cur_n_created == cur_n_done) {
                         is_done = true;
-                        //printf("%d [%d] sees we are done. %d %d\n", thread_id, blockIdx.x, cur_n_created, cur_n_done);
                     }
                     else if (WARP == 0){
                         // There might be some particles left in a buffer. 
@@ -214,7 +202,6 @@ __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, i
                     needs_new_i = true;
                     __threadfence();
                     int test = atomicAdd(n_done,1);
-                    //printf("%d [%d] is done working on a particle. n done %d\n", thread_id, blockIdx.x, test+1);
                 }
             }
         }
@@ -226,7 +213,6 @@ __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, i
     leaving_index = __shfl_sync(FULL_MASK, leaving_index, 0);
 
     if (leaving_index == 1){
-        //printf("%d [%d] Is the last to leave. Buffer: %d\n", thread_id, blockIdx.x, n_block);
         flush_buffer(d_electrons, new_particles_block, n, capacity);
     }
 }

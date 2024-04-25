@@ -1,0 +1,38 @@
+#!/bin/bash
+# V100 GPUs with up to 32GB of memory each
+# The queue that we want to submit our job to.
+# In this case it is the V100 GPUs, but there's also equvalent
+# queues for A100, such as gpua100.
+#BSUB -q gpuv100
+# The name of the job. Will e.g. be shown using the `bstat` command.
+#BSUB -J ParticleSimulation
+# The number of cores that we want to allocate, this is equavalent
+# to the total number of cores for the whole job, so if we wish to
+# run 32 threads on 4 nodes, this number need to be 128.
+#BSUB -n 4
+# Specifics on the GPU allocation.
+# In this case one GPU with exclusive access.
+# The `num` can be changed up to the total number of GPUs on the node.
+#BSUB -gpu "num=1:mode=exclusive_process"
+# Total walltime of the program, How much time do we expect it to run.
+# When this time has passed the program WILL be killed if it is not
+# comlete.
+#BSUB -W 0:05
+# How much memory do we want to allocate per core allocated.
+# In this case we will have 4x16GB as we have 4 cores
+#BSUB -R "rusage[mem=16GB]"
+# How do we want the cores distributed.
+# `hosts=1` mean that we want all cores on the same node.
+#BSUB -R "span[hosts=1]"
+# stdout and stderr files
+#BSUB -o "out/jobs/Job_%J.out"
+#BSUB -e "out/jobs/Job_%J.err"
+# You might need to load modules here before starting the program.
+# module load cuda/12.2.2 nvhpc/23.7-nompi
+# Make sure that the output folder exist
+mkdir -p out/jobs
+# Replace <program> and <args> with your own
+./run 30 0 10 10 512 1000000 200 20 0 1 > out/jobs/Job_${LSB_JOBID}.log
+# The pipe `>` will take the output of the program and write it to
+# a text file. You can also remove this and then the output will be
+# written in the out/MyProgram_%J.out file.

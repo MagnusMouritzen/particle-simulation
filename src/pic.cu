@@ -228,7 +228,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     cudaEventCreate(&stop);
 
     CSData* cross_sections = (CSData*)malloc(sizeof(CSData)*11);
-    ProcessCSData(cross_sections, 11, "/zhome/b5/3/156408/Desktop/particle-simulation/src/cross_section.txt");
+    ProcessCSData(cross_sections, 11, "./src/cross_section.txt");
 
     
     CSData* d_cross_sections;

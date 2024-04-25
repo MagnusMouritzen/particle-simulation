@@ -187,7 +187,11 @@ __global__ static void naive(Electron* d_electrons, float deltaTime, int* n, int
     // The thread index has passed the number of d_electrons. Thread returns if all electron are being handled
     if (i >= start_n) return;
 
-    updateParticle(&d_electrons[i], new_particles_block, deltaTime, &n_block, capacity, &d_rand_states[i], i, t, sim_size, d_cross_sections);
+    Electron electron = d_electrons[i];
+    if (electron.timestamp != DEAD){
+        updateParticle(&electron, new_particles_block, deltaTime, &n_block, capacity, &d_rand_states[i], i, t, sim_size, d_cross_sections);
+        d_electrons[i] = electron;
+    }
 
     __syncthreads();
 

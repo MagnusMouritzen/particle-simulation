@@ -52,11 +52,12 @@ __device__ void uploadElectron(Electron* destination, Electron new_electron, int
 
 __device__ void flush_buffer(Electron* d_electrons, Electron* new_particles_block, int* n, int capacity){
     aquireLock(&buffer_lock);
-    if (n_block != 0 && *n < capacity){  
+    int cur_n_block = atomicAdd(&n_block, 0);
+    if (cur_n_block != 0 && *n < capacity){  
         int new_i_global;
-        if (LANE == 0) new_i_global = atomicAdd(n, n_block);
+        if (LANE == 0) new_i_global = atomicAdd(n, cur_n_block);
         new_i_global = __shfl_sync(FULL_MASK, new_i_global, 0) + LANE;
-        if (new_i_global < capacity && LANE < n_block){
+        if (new_i_global < capacity && LANE < cur_n_block){
             uploadElectron(&d_electrons[new_i_global], new_particles_block[LANE], new_i_global);
         }
         __syncwarp();
@@ -94,6 +95,7 @@ __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, i
             break;
         }
 
+        // If WARP 0 wants to flush, do it.
         int wants_to_flush_mask = __ballot_sync(FULL_MASK, wants_to_flush);
         if (wants_to_flush_mask == FULL_MASK){
             flush_buffer(d_electrons, new_particles_block, n, capacity);
@@ -157,7 +159,7 @@ __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, i
             needs_new_i = false;
         }
 
-
+        // Update particle, look for new work, or check for done.
         if (!is_done){
             if (t == over_t){  // We don't have a particle and must load a new one
                 if (WARP != 0 && i_local >= capacity){
@@ -167,7 +169,7 @@ __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, i
                     if (d_electrons[i_local].timestamp == over_t-1){  // This new electron was spawned at the very end and needs no more.
                         needs_new_i = true;
                         __threadfence();
-                        int test = atomicAdd(n_done,1);
+                        atomicAdd(n_done,1);
                     }
                     else{
                         electron = d_electrons[i_local];
@@ -175,17 +177,16 @@ __global__ static void poisson(Electron* d_electrons, float deltaTime, int* n, i
                     }
                 }
                 else{  // Check if we are done with the simulation
-                    int cur_n_done = atomicAdd(n_done, 0);
+                    int cur_n_done = *n_done;
                     __threadfence();
-                    int cur_n_created = min(capacity, atomicAdd(n_created, 0));
+                    int cur_n_created = min(capacity, *n_created);
                     if (cur_n_created == cur_n_done) {
                         is_done = true;
                     }
                     else if (WARP == 0){
                         // There might be some particles left in a buffer. 
                         // It might as well just be one warp to deal with it.
-                        int cur_n = atomicAdd(n, 0);
-                        if (cur_n == cur_n_done && n_block != 0){
+                        if (*n== cur_n_done && n_block != 0){
                             wants_to_flush = true;
                         }
                     }

@@ -14,7 +14,7 @@ __global__ void setup_particles(Electron* d_electrons, curandState* d_rand_state
     // d_electrons[i].position = make_float3(randFloat(&d_rand_states[i], 0, (grid_size.x) * cell_size), 
     //                                       randFloat(&d_rand_states[i], 0, (grid_size.y) * cell_size), 
     //                                       randFloat(&d_rand_states[i], 0, (grid_size.z) * cell_size));
-    printf("x %d, y %d, z %d \n", (int)(d_electrons[i].position.x/cell_size), (int)(d_electrons[i].position.y/cell_size), (int)(d_electrons[i].position.z/cell_size));
+    // printf("x %d, y %d, z %d \n", (int)(d_electrons[i].position.x/cell_size), (int)(d_electrons[i].position.y/cell_size), (int)(d_electrons[i].position.z/cell_size));
     d_electrons[i].weight = 1.0;
     d_electrons[i].timestamp = -1;
 }

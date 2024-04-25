@@ -29,6 +29,10 @@ int main(int argc, char **argv) {
     if (!strcmp(argv[1], "31")){ // CPUSynch
         runPIC(init_n, max_n, max_t, poisson_timestep, 1, verbose, block_size, sleep_time);
     }
+    // Naive
+    if (!strcmp(argv[1], "32")){ // Naive
+        runPIC(init_n, max_n, max_t, poisson_timestep, 2, verbose, block_size, sleep_time);
+    }
     double time = end_cpu_timer(start);
     printf("CPU time of program: %f ms\n", time);
 }

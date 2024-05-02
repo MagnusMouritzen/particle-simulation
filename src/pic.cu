@@ -64,7 +64,7 @@ __device__ void flush_buffer(Electron* d_electrons, Electron* new_particles_bloc
 }
 
 __global__ static void dynamic(Electron* d_electrons, float deltaTime, int* n, int capacity, curandState* d_rand_states, int poisson_timestep, int sleep_time_ns, int* n_created, int* n_done, int* i_global, float3 sim_size, CSData* d_cross_sections) {
-    int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
+    //int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
     extern __shared__ Electron new_particles_block[];
 
     curandState rand_state;// = d_rand_states[thread_id];
@@ -88,7 +88,7 @@ __global__ static void dynamic(Electron* d_electrons, float deltaTime, int* n, i
         // If all threads in the warp have figured out that they are done, clean up and break.
         int done_mask = __ballot_sync(FULL_MASK, is_done);
         if (done_mask == FULL_MASK){
-            d_rand_states[thread_id] = rand_state;
+            //d_rand_states[thread_id] = rand_state;
             break;
         }
 
@@ -292,7 +292,7 @@ __global__ static void naive(Electron* d_electrons, float deltaTime, int* n, int
 }
 
 __global__ static void dynamicOld(Electron* d_electrons, float deltaTime, int* n, int capacity, curandState* d_rand_states, int poisson_timestep, int sleep_time_ns, int* n_done, int* i_global, float3 sim_size, CSData* d_cross_sections) {
-    int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
+    //int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
     while (true) {
         __syncthreads(); //sync threads seems to be able to handle threads being terminated
         if (threadIdx.x==0) {
@@ -439,6 +439,9 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
 
     cudaEventRecord(start);
 
+    int total_added = 0;
+    int total_removed = 0;
+
     int source_index = 0;
     int destination_index = 0;
     for (int t = 0; t < poisson_steps; t++)
@@ -451,6 +454,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
         cudaMemset(n_done, 0, sizeof(int));
         cudaMemset(i_global, 0, sizeof(int));
 
+        // Grid operations
         resetGrid<<<dim_grid, dim_block>>>(d_grid, Grid_Size);
         cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
         checkCudaError("Reset grid");
@@ -464,6 +468,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
         cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
         checkCudaError("Grid to particles");
 
+        // Simulate
         switch(mode){
             case 0:{  // Dynamic
                 dynamic<<<num_blocks_pers, block_size, shared_mem_size_dynamic>>>(&d_electrons[source_index], 0.0001, n, capacity, d_rand_states, poisson_timestep, sleep_time_ns, n_created, n_done, i_global, Sim_Size, d_cross_sections);
@@ -493,14 +498,21 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
                 break;
             }
         }
+        int old_n_host = *n_host;
         cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
+        total_added += *n_host - old_n_host;
         checkCudaError("Mobility steps");
+
+        // Remove dead particles
         cudaMemset(n, 0, sizeof(int));
         num_blocks_all = (min(*n_host, capacity) + block_size - 1) / block_size;
         remove_dead_particles<<<num_blocks_all, block_size>>>(&d_electrons[source_index], &d_electrons[destination_index], n, min(*n_host, capacity));
+        old_n_host = *n_host;
         cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
+        total_removed += old_n_host - *n_host;
         cudaMemcpy(n_created, n_host, sizeof(int), cudaMemcpyHostToDevice);
         checkCudaError("Remove dead");
+
         if (*n_host == 0){
             printf("Hit 0\n");
             break;
@@ -519,6 +531,8 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     float runtime_ms = 0;
     cudaEventElapsedTime(&runtime_ms, start, stop);
     printf("Final amount of particles: %d\n", min(*n_host, capacity));
+    printf("Particles added: %d\n", total_added);
+    printf("Particles removed: %d\n", total_removed);
     printf("GPU time of program: %f ms\n", runtime_ms);
     timing_data.time = runtime_ms;
     timing_data.final_n = min(*n_host, capacity);

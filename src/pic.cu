@@ -8,8 +8,6 @@
 #define FULL_MASK 0xffffffff
 #define LANE (threadIdx.x & 31)
 #define WARP (threadIdx.x >> 5)
-#define getGridCell(x,y,z) (((Cell*)((((char*)d_grid.ptr) + z * (d_grid.pitch * grid_size.y)) + y * d_grid.pitch))[x])
-
 
 __shared__ int i_block;
 __shared__ int capacity;
@@ -219,111 +217,35 @@ __global__ static void dynamic(Electron* d_electrons, float deltaTime, int* n, i
     }
 }
 
-__global__ static void remove_dead_particles(Electron* d_electrons_old, Electron* d_electrons_new, int* n, int start_n){
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    bool alive = (i < start_n) && (d_electrons_old[i].timestamp != DEAD);
-    int alive_mask = __ballot_sync(FULL_MASK, alive);
-
-    if (i >= start_n) return;
-
-    if (threadIdx.x == 0) n_block = 0;
-    __syncthreads();
-
-    int count = __popc(alive_mask);
-    int leader = __ffs(alive_mask) - 1;
-    int rank = __popc(alive_mask & lanemask_lt());
-
-    int i_local = 0;
-    if(LANE == leader) {
-        i_local = atomicAdd(&n_block, count);
-    }
-    i_local = __shfl_sync(alive_mask, i_local, leader);
-    i_local += rank;
-
-    __syncthreads();
-    if (threadIdx.x == 0){
-        i_block = atomicAdd(n, n_block);
-    }
-    __syncthreads();
-
-    if (!alive) return;
-    d_electrons_new[i_block + i_local] = d_electrons_old[i];
-    d_electrons_new[i_block + i_local].timestamp = -1;
-}
-
-__global__ static void particlesToGrid(cudaPitchedPtr d_grid, Electron* d_electrons, int* n, int3 grid_size) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= *n) return;
-
-
+__device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, curandState* rand_state, int i, int poisson_timestep, float3 sim_size, CSData* d_cross_sections){
     Electron electron = d_electrons[i];
-
-    int x = electron.position.x/cell_size;
-    int y = electron.position.y/cell_size;
-    int z = electron.position.z/cell_size;
-
-    atomicAdd(&getGridCell(x,y,z).charge, 1);
-
-}
-
-__global__ static void gridToParticles(cudaPitchedPtr d_grid, Electron* d_electrons, int* n, int3 grid_size) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= *n) return;
-
-    Electron electron = d_electrons[i];
-
-    int x = electron.position.x/cell_size;
-    int y = electron.position.y/cell_size;
-    int z = electron.position.z/cell_size;
-
-
-    electron.acceleration =  getGridCell(x,y,z).acceleration;
-
+    Electron new_electron;
+    int start_t = max(1, electron.timestamp + 1);
+    
+    for(int t = start_t; t <= poisson_timestep; t++){
+        if (updateParticle(&electron, &new_electron, deltaTime, rand_state, i, t, sim_size, d_cross_sections)){
+            if (*n < capacity){
+                int new_i = atomicAdd(n, 1);
+                if (new_i < capacity){
+                    d_electrons[new_i] = new_electron;
+                }
+            }
+        }
+        else if (electron.timestamp == DEAD){  // If particle is to be removed.
+            // printf("%d: (%d) DEAD\n", i, t);
+            break;
+        }
+    }
 
     d_electrons[i] = electron;
-
 }
 
-__global__ void resetGrid(cudaPitchedPtr d_grid, int3 grid_size) {
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
-    int z = blockIdx.z * blockDim.z + threadIdx.z;
-    
-    getGridCell(x,y,z).charge = 0;
-}
+__global__ static void cpuSync(Electron* d_electrons, float deltaTime, int* n, int start_n, int offset, int capacity, curandState* d_rand_states, int poisson_timestep, float3 sim_size, CSData* d_cross_sections) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x + offset;
 
-__global__ void updateGrid(cudaPitchedPtr d_grid, double electric_force_constant, int3 grid_size) {
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
-    int z = blockIdx.z * blockDim.z + threadIdx.z;
-
-    // INSERT ELEMENT TO 3D ARRAY
-    char* gridPtr = (char*)d_grid.ptr;
-    size_t pitch = d_grid.pitch; // the number of bytes in a row of the array
-    size_t slicePitch = pitch * grid_size.y; // the number of bytes pr slice
-
-    char* slice = gridPtr + z * slicePitch; // get slice 
-
-    char* row = (slice + y * pitch); // get row in slice
-
-
-    double xAcc = 0;
-    if (x != 0) xAcc -= ((Cell*)row)[x-1].charge;
-    if (x != grid_size.x-1) xAcc += ((Cell*)row)[x+1].charge;
-    xAcc *= electric_force_constant;
-
-    double yAcc = 0;
-    if (y != 0) yAcc -= ((Cell*)(row - pitch))[x].charge;
-    if (y != grid_size.y-1) yAcc += ((Cell*)(row + pitch))[x].charge;
-    yAcc *= electric_force_constant;
-
-    double zAcc = 0;
-    if (z != 0) zAcc -= ((Cell*)(row-slicePitch))[x].charge;
-    if (z != grid_size.z-1) zAcc += ((Cell*)(row+slicePitch))[x].charge;
-    zAcc *= electric_force_constant;
-
-    ((Cell*)row)[x].acceleration = make_float3((float)xAcc, (float)yAcc, (float)zAcc);
-
+    // The thread index has passed the number of d_electrons. Thread returns if all electron are being handled
+    if (i >= start_n) return;
+    simulateMany(d_electrons, deltaTime, n, capacity, &d_rand_states[i], i, poisson_timestep, sim_size, d_cross_sections);
 }
 
 __global__ static void naive(Electron* d_electrons, float deltaTime, int* n, int start_n, int capacity, curandState* d_rand_states, int t, float3 sim_size, CSData* d_cross_sections) {
@@ -365,35 +287,36 @@ __global__ static void naive(Electron* d_electrons, float deltaTime, int* n, int
     d_electrons[global_i] = new_particles_block[threadIdx.x];
 }
 
-__device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, curandState* rand_state, int i, int poisson_timestep, float3 sim_size, CSData* d_cross_sections){
-    Electron electron = d_electrons[i];
-    Electron new_electron;
-    int start_t = max(1, electron.timestamp + 1);
-    
-    for(int t = start_t; t <= poisson_timestep; t++){
-        if (updateParticle(&electron, &new_electron, deltaTime, rand_state, i, t, sim_size, d_cross_sections)){
-            if (*n < capacity){
-                int new_i = atomicAdd(n, 1);
-                if (new_i < capacity){
-                    d_electrons[new_i] = new_electron;
-                }
-            }
-        }
-        else if (electron.timestamp == DEAD){  // If particle is to be removed.
-            // printf("%d: (%d) DEAD\n", i, t);
-            break;
-        }
-    }
+__global__ static void remove_dead_particles(Electron* d_electrons_old, Electron* d_electrons_new, int* n, int start_n){
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    bool alive = (i < start_n) && (d_electrons_old[i].timestamp != DEAD);
+    int alive_mask = __ballot_sync(FULL_MASK, alive);
 
-    d_electrons[i] = electron;
-}
-
-__global__ static void cpuSynch(Electron* d_electrons, float deltaTime, int* n, int start_n, int offset, int capacity, curandState* d_rand_states, int poisson_timestep, float3 sim_size, CSData* d_cross_sections) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x + offset;
-
-    // The thread index has passed the number of d_electrons. Thread returns if all electron are being handled
     if (i >= start_n) return;
-    simulateMany(d_electrons, deltaTime, n, capacity, &d_rand_states[i], i, poisson_timestep, sim_size, d_cross_sections);
+
+    if (threadIdx.x == 0) n_block = 0;
+    __syncthreads();
+
+    int count = __popc(alive_mask);
+    int leader = __ffs(alive_mask) - 1;
+    int rank = __popc(alive_mask & lanemask_lt());
+
+    int i_local = 0;
+    if(LANE == leader) {
+        i_local = atomicAdd(&n_block, count);
+    }
+    i_local = __shfl_sync(alive_mask, i_local, leader);
+    i_local += rank;
+
+    __syncthreads();
+    if (threadIdx.x == 0){
+        i_block = atomicAdd(n, n_block);
+    }
+    __syncthreads();
+
+    if (!alive) return;
+    d_electrons_new[i_block + i_local] = d_electrons_old[i];
+    d_electrons_new[i_block + i_local].timestamp = -1;
 }
 
 RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timestep, int mode, int verbose, int block_size, int sleep_time_ns) {
@@ -516,7 +439,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
                 int last_n = 0;  // The amount of particles present in last run. All of these have been fully simulated.
                 while(min(*n_host, capacity) != last_n){  // Stop once nothing new has happened.
                     int num_blocks = (min(*n_host, capacity) - last_n + block_size - 1) / block_size;  // We do not need blocks for the old particles.
-                    cpuSynch<<<num_blocks, block_size>>>(&d_electrons[source_index], 0.0001, n, min(*n_host, capacity), last_n, capacity, d_rand_states, poisson_timestep, Sim_Size, d_cross_sections);
+                    cpuSync<<<num_blocks, block_size>>>(&d_electrons[source_index], 0.0001, n, min(*n_host, capacity), last_n, capacity, d_rand_states, poisson_timestep, Sim_Size, d_cross_sections);
                     last_n = min(*n_host, capacity);  // Update last_n to the amount just run. NOT to the amount after this run (we don't know that amount yet).
                     cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Now update to the current amount of particles.
                 }

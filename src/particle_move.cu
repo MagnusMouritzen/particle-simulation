@@ -65,8 +65,10 @@ __device__ bool collider(Electron* electron, Electron* new_electron, float delta
     
     int split_chance = d_cross_sections[electron_energy_index].split_chance;
     int remove_chance = d_cross_sections[electron_energy_index].remove_chance;
+    int add = 0;
     
     if (rand < split_chance) {
+        add = 11;
         spawned_new = true;
         *new_electron = *electron;
         new_electron->creator = i;
@@ -77,8 +79,10 @@ __device__ bool collider(Electron* electron, Electron* new_electron, float delta
         electron->velocity.z = -electron->velocity.z;
     }
     else if (rand < remove_chance + split_chance){
+        add = 222;
         electron->timestamp = DEAD;
     }
+    //printf("%d (%d): %f : %d\n", blockIdx.x * blockDim.x + threadIdx.x, i, rand, add);
     return spawned_new;
 }
 

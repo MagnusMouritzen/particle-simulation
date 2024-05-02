@@ -69,7 +69,7 @@ __global__ static void dynamic(Electron* d_electrons, float deltaTime, int* n, i
     int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
     extern __shared__ Electron new_particles_block[];
 
-    curandState rand_state = d_rand_states[thread_id];
+    curandState rand_state;// = d_rand_states[thread_id];
     Electron electron;
     Electron new_electron;
     bool has_new_electron = false;
@@ -172,6 +172,7 @@ __global__ static void dynamic(Electron* d_electrons, float deltaTime, int* n, i
                     }
                     else{
                         electron = d_electrons[i_local];
+                        rand_state = d_rand_states[i_local];
                         t =  max(1, electron.timestamp + 1);
                     }
                 }
@@ -198,6 +199,7 @@ __global__ static void dynamic(Electron* d_electrons, float deltaTime, int* n, i
                 if (has_new_electron) atomicAdd(n_created, 1);
                 if (++t == over_t || electron.timestamp == DEAD){  // Particle done with this simulation
                     d_electrons[i_local] = electron;
+                    d_rand_states[i_local] = rand_state;
                     t = over_t;
                     needs_new_i = true;
                     __threadfence();
@@ -360,25 +362,20 @@ __global__ static void naive(Electron* d_electrons, float deltaTime, int* n, int
     if (threadIdx.x >= n_block) return;
     int global_i = new_i_block + threadIdx.x;
     if (global_i >= capacity) return;
-    newRandState(d_rand_states, global_i, randInt(&d_rand_states[new_particles_block[threadIdx.x].creator], 0, 10000));
     d_electrons[global_i] = new_particles_block[threadIdx.x];
-    d_electrons[global_i].timestamp = t;
 }
 
-__device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, curandState* rand_state, int i, int start_t, int poisson_timestep, float3 sim_size, CSData* d_cross_sections){
+__device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, curandState* rand_state, int i, int poisson_timestep, float3 sim_size, CSData* d_cross_sections){
     Electron electron = d_electrons[i];
     Electron new_electron;
-
+    int start_t = max(1, electron.timestamp + 1);
+    
     for(int t = start_t; t <= poisson_timestep; t++){
-        if (updateParticle(&electron, d_electrons, deltaTime, rand_state, i, t, sim_size, d_cross_sections)){
+        if (updateParticle(&electron, &new_electron, deltaTime, rand_state, i, t, sim_size, d_cross_sections)){
             if (*n < capacity){
                 int new_i = atomicAdd(n, 1);
                 if (new_i < capacity){
-                    int timestamp = new_electron.timestamp;
-                    new_electron.timestamp = 0;
                     d_electrons[new_i] = new_electron;
-                    __threadfence();
-                    d_electrons[new_i].timestamp = timestamp;
                 }
             }
         }
@@ -396,7 +393,7 @@ __global__ static void cpuSynch(Electron* d_electrons, float deltaTime, int* n, 
 
     // The thread index has passed the number of d_electrons. Thread returns if all electron are being handled
     if (i >= start_n) return;
-    simulateMany(d_electrons, deltaTime, n, capacity, &d_rand_states[i], i, max(1, d_electrons[i].timestamp + 1), poisson_timestep, sim_size, d_cross_sections);
+    simulateMany(d_electrons, deltaTime, n, capacity, &d_rand_states[i], i, poisson_timestep, sim_size, d_cross_sections);
 }
 
 RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timestep, int mode, int verbose, int block_size, int sleep_time_ns) {
@@ -429,8 +426,10 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     num_blocks_pers *= num_blocks; 
 
     int num_blocks_rand;
-    if (mode == 0) num_blocks_rand = num_blocks_pers;
-    else num_blocks_rand = (capacity + block_size - 1) / block_size;  // If not using persistent kernel, we don't know how many threads there will be. It can be up to cap.
+    num_blocks_rand = (capacity + block_size - 1) / block_size;
+    // Use the line above instead for more determinism.
+    //if (mode == 0) num_blocks_rand = num_blocks_pers;
+    //else num_blocks_rand = (capacity + block_size - 1) / block_size;  // If not using persistent kernel, we don't know how many threads there will be. It can be up to cap.
 
     curandState* d_rand_states;
     cudaMalloc(&d_rand_states, num_blocks_rand * block_size * sizeof(curandState));

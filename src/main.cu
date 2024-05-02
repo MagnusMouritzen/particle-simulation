@@ -21,17 +21,21 @@ int main(int argc, char **argv) {
     int sleep_time = boost::lexical_cast<int>(argv[7]);
     int poisson_timestep = boost::lexical_cast<int>(argv[8]);
     
-    // PIC
-    if (!strcmp(argv[1], "30")){ // PIC GOOD
+    // Dynamic
+    if (!strcmp(argv[1], "30")){
         runPIC(init_n, max_n, max_t, poisson_timestep, 0, verbose, block_size, sleep_time);
     }
     // CPUSynch
-    if (!strcmp(argv[1], "31")){ // CPUSynch
+    else if (!strcmp(argv[1], "31")){
         runPIC(init_n, max_n, max_t, poisson_timestep, 1, verbose, block_size, sleep_time);
     }
     // Naive
-    if (!strcmp(argv[1], "32")){ // Naive
+    else if (!strcmp(argv[1], "32")){
         runPIC(init_n, max_n, max_t, poisson_timestep, 2, verbose, block_size, sleep_time);
+    }
+    // Dynamic Old
+    else if (!strcmp(argv[1], "33")){
+        runPIC(init_n, max_n, max_t, poisson_timestep, 3, verbose, block_size, sleep_time);
     }
     double time = end_cpu_timer(start);
     printf("CPU time of program: %f ms\n", time);

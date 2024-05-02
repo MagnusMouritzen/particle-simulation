@@ -227,7 +227,11 @@ __device__ static void simulateMany(Electron* d_electrons, float deltaTime, int*
             if (*n < capacity){
                 int new_i = atomicAdd(n, 1);
                 if (new_i < capacity){
+                    int timestamp = new_electron.timestamp;
+                    new_electron.timestamp = 0;
                     d_electrons[new_i] = new_electron;
+                    __threadfence();
+                    d_electrons[new_i].timestamp = timestamp;
                 }
             }
         }
@@ -285,6 +289,33 @@ __global__ static void naive(Electron* d_electrons, float deltaTime, int* n, int
     int global_i = new_i_block + threadIdx.x;
     if (global_i >= capacity) return;
     d_electrons[global_i] = new_particles_block[threadIdx.x];
+}
+
+__global__ static void dynamicOld(Electron* d_electrons, float deltaTime, int* n, int capacity, curandState* d_rand_states, int poisson_timestep, int sleep_time_ns, int* n_done, int* i_global, float3 sim_size, CSData* d_cross_sections) {
+    int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
+    while (true) {
+        __syncthreads(); //sync threads seems to be able to handle threads being terminated
+        if (threadIdx.x==0) {
+            i_block = atomicAdd(i_global, blockDim.x);
+        }
+        __syncthreads();
+
+        int i = i_block + threadIdx.x;
+
+        if (i >= capacity) break;
+
+        while (d_electrons[i].timestamp == 0 || i >= *n) {
+            int cur_n_done = *n_done;
+            __threadfence();
+            int cur_n = *n;
+            if (cur_n==cur_n_done) return;
+            __nanosleep(sleep_time_ns);
+        }
+
+        simulateMany(d_electrons, deltaTime, n, capacity, &d_rand_states[i], i, poisson_timestep, sim_size, d_cross_sections);
+        atomicAdd(n_done,1);
+
+    }
 }
 
 __global__ static void remove_dead_particles(Electron* d_electrons_old, Electron* d_electrons_new, int* n, int start_n){
@@ -401,6 +432,9 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
         case 2:
             timing_data.function = "Naive";
             break;
+        case 3:
+            timing_data.function = "Dynamic Old";
+            break;
     }
 
     cudaEventRecord(start);
@@ -452,6 +486,11 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
                     log(verbose, t, h_electrons, d_electrons, n_host, n, capacity);
                     cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
                 }
+                break;
+            }
+            case 3:{  // Dynamic Old
+                dynamicOld<<<num_blocks_pers, block_size>>>(&d_electrons[source_index], 0.0001, n, capacity, d_rand_states, poisson_timestep, sleep_time_ns, n_done, i_global, Sim_Size, d_cross_sections);
+                break;
             }
         }
         cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
@@ -468,7 +507,6 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
         }
     }
     log(verbose, poisson_steps, h_electrons, &d_electrons[destination_index], n_host, n, capacity);
-    
     
     cudaEventRecord(stop);
         

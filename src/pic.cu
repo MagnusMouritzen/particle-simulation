@@ -456,17 +456,17 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
 
         // Grid operations
         resetGrid<<<dim_grid, dim_block>>>(d_grid, Grid_Size);
-        cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
-        checkCudaError("Reset grid");
+        // cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
+        // checkCudaError("Reset grid");
         particlesToGrid<<<num_blocks_all, block_size>>>(d_grid, &d_electrons[source_index], n, Grid_Size);
-        cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
-        checkCudaError("Particles to grid");
+        // cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
+        // checkCudaError("Particles to grid");
         updateGrid<<<dim_grid, dim_block>>>(d_grid, Electric_Force_Constant, Grid_Size);
-        cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
-        checkCudaError("Update grid");
+        // cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
+        // checkCudaError("Update grid");
         gridToParticles<<<num_blocks_all, block_size>>>(d_grid, &d_electrons[source_index], n, Grid_Size);
-        cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
-        checkCudaError("Grid to particles");
+        // cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
+        // checkCudaError("Grid to particles");
 
         int old_n_host = *n_host;
 

@@ -5,4 +5,4 @@
 
 void runBenchmark();
 
-void runUnitTest(int init_n, int max_n, int max_t, int verbose, int block_size, int sleep_time);
+void runUnitTest(int init_n, int max_n, int max_t, int poisson_timestep, int verbose, int block_size, int sleep_time);

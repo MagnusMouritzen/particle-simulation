@@ -34,7 +34,7 @@ void runBenchmark(){
     printCSV(data, "out/data/data.csv");
 }
 
-void runUnitTest(int init_n, int max_n, int max_t, int verbose, int block_size, int sleep_time){
+void runUnitTest(int init_n, int max_n, int max_t, int poisson_timestep, int verbose, int block_size, int sleep_time){
     // How I ran it:
     // run test 0 1 200 256 10000000 100
     int base_function = 0;
@@ -44,7 +44,7 @@ void runUnitTest(int init_n, int max_n, int max_t, int verbose, int block_size, 
     bool broken[amnt];
     int final_ns[amnt];
 
-    RunData base_run_data = runPIC(init_n, max_n, max_t, 1, base_function, 0, block_size, sleep_time);
+    RunData base_run_data = runPIC(init_n, max_n, max_t, poisson_timestep, base_function, verbose, block_size, sleep_time);
     Electron* base_electrons = base_run_data.electrons;
     int base_final_n = base_run_data.final_n;
     printf("Sorting base...\n");
@@ -54,7 +54,7 @@ void runUnitTest(int init_n, int max_n, int max_t, int verbose, int block_size, 
     for(int fi = 0; fi < amnt; fi++){
         int function = test_functions[fi];
         broken[fi] = false;
-        RunData run_data = runPIC(init_n, max_n, max_t, 1, function, 0, block_size, sleep_time);
+        RunData run_data = runPIC(init_n, max_n, max_t, poisson_timestep, function, verbose, block_size, sleep_time);
         Electron* electrons = run_data.electrons;
         int final_n = run_data.final_n;
         final_ns[fi] = final_n;

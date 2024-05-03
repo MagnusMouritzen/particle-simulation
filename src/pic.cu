@@ -468,6 +468,8 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
         cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
         checkCudaError("Grid to particles");
 
+        int old_n_host = *n_host;
+
         // Simulate
         switch(mode){
             case 0:{  // Dynamic
@@ -498,7 +500,6 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
                 break;
             }
         }
-        int old_n_host = *n_host;
         cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
         total_added += *n_host - old_n_host;
         checkCudaError("Mobility steps");

@@ -37,6 +37,10 @@ int main(int argc, char **argv) {
     else if (!strcmp(argv[1], "33")){
         runPIC(init_n, max_n, max_t, poisson_timestep, 3, verbose, block_size, sleep_time);
     }
+    // Test
+    else if (!strcmp(argv[1], "test")){
+        runUnitTest(init_n, max_n, max_t, poisson_timestep, verbose, block_size, sleep_time);
+    }
     double time = end_cpu_timer(start);
     printf("CPU time of program: %f ms\n", time);
 }

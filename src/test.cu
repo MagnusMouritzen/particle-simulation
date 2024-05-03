@@ -6,10 +6,10 @@ using namespace std;
 void runBenchmark(){
     vector<TimingData> data;
     int init_ns[] = {100000};
-    int block_sizes[] = {128,256,512};
+    int block_sizes[] = {128,256,512,1024};
     int max_ts[] = {10000};
     int max_ns[] = {10000000};
-    int functions[] = {1,2,3,4,5,6,8,9,10,11,12};
+    int functions[] = {0,1,2,3,4,5,6,8,9,10,11,12};
     int sleep_times[] = {100};
 
     for(int init_n : init_ns){
@@ -27,7 +27,7 @@ void runBenchmark(){
             }
         }
     }
-    printCSV(data, "out/data.csv");
+    printCSV(data, "out/data/schedulers.csv");
 }
 
 void runUnitTest(int init_n, int max_n, int max_t, int verbose, int block_size, int sleep_time){

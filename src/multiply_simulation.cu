@@ -117,16 +117,25 @@ __global__ static void updateNormalPersistentWithGlobal(Electron* electrons, flo
         int wait_target = (t % 2) * sync_agents;  // Alternates between 0 and sync_target;
 
         atomicAdd(&wait_counter[0], dir);
-        while (atomicAdd(&wait_counter[0], 0) != wait_target) {
+        while (wait_counter[0] != wait_target) {
+            __threadfence();
             __nanosleep(sleep_time_ns);
         }
+
+        // while (atomicAdd(&wait_counter[0], 0) != wait_target) {
+        //     __nanosleep(sleep_time_ns);
+        // }
 
         start_n = atomicAdd(n, 0);
         
         atomicAdd(&wait_counter[1], dir);
-        while (atomicAdd(&wait_counter[1], 0) != wait_target){
+        while (wait_counter[1] != wait_target) {
+            __threadfence();
             __nanosleep(sleep_time_ns);
         }
+        // while (atomicAdd(&wait_counter[1], 0) != wait_target){
+        //     __nanosleep(sleep_time_ns);
+        // }
     }
 }
 
@@ -149,7 +158,8 @@ __global__ static void updateNormalPersistentWithOrganisedGlobal(Electron* elect
         
         if (threadIdx.x == 0) {
             atomicAdd(&wait_counter[0], dir);
-            while (atomicAdd(&wait_counter[0], 0) != wait_target) {
+            while (wait_counter[0] != wait_target) {
+                __threadfence();
                 __nanosleep(sleep_time_ns);
             }
         }
@@ -159,7 +169,8 @@ __global__ static void updateNormalPersistentWithOrganisedGlobal(Electron* elect
         
         if (threadIdx.x == 0) {
             atomicAdd(&wait_counter[1], dir);
-            while (atomicAdd(&wait_counter[1], 0) != wait_target){
+            while (wait_counter[1] != wait_target) {
+                __threadfence();
                 __nanosleep(sleep_time_ns);
             }
         }
@@ -416,7 +427,7 @@ RunData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, 
             for (int t = 1; t <= max_t; t++) {
                 void *kernelArgs[] = { &electrons, &delta_time, &n, &capacity, &t };
                 cudaLaunchCooperativeKernel((void*)updateStatic, dimGrid, dimBlock, kernelArgs);
-                cudaDeviceSynchronize();
+                // cudaDeviceSynchronize();
                 log(verbose, t, electrons_host, electrons, n_host, n, capacity);
             }
             cudaEventRecord(stop);

@@ -58,8 +58,7 @@ __device__ bool collider(Electron* electron, Electron* new_electron, float delta
     double electron_energy = (electron->velocity.x * electron->velocity.x) + 
                              (electron->velocity.y * electron->velocity.y) +
                              (electron->velocity.z * electron->velocity.z);
-    int electron_energy_index = trunc(log10(electron_energy));
-    electron_energy_index = (electron_energy_index < 0) ? 0 : ((electron_energy_index > 10) ? 10 : electron_energy_index);
+    int electron_energy_index = energyToIndex(electron_energy);
 
     // printf("x %d, y %d, z %d, energy : %e, index %d \n", (int)(electron->position.x/cell_size), (int)(electron->position.y/cell_size), (int)(electron->position.z/cell_size), electron_energy, electron_energy_index);
     

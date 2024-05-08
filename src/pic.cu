@@ -363,13 +363,13 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
 
-    CSData* cross_sections = (CSData*)malloc(sizeof(CSData)*11);
-    ProcessCSData(cross_sections, 11, "./src/cross_section.txt");
+    CSData* cross_sections = (CSData*)malloc(sizeof(CSData)*N_STEPS);
+    processCSData(cross_sections, "./src/cross_section.txt");
 
     
     CSData* d_cross_sections;
-    cudaMalloc(&d_cross_sections, 11 * sizeof(CSData));
-    cudaMemcpy(d_cross_sections, cross_sections, 11 * sizeof(CSData), cudaMemcpyHostToDevice);
+    cudaMalloc(&d_cross_sections, N_STEPS * sizeof(CSData));
+    cudaMemcpy(d_cross_sections, cross_sections, N_STEPS * sizeof(CSData), cudaMemcpyHostToDevice);
 
     const int shared_mem_size_dynamic = 32 * sizeof(Electron);
     const int shared_mem_size_naive = block_size * sizeof(Electron);

@@ -6,6 +6,7 @@
 
 using namespace std;
 
+#define N_STEPS 11
 
 struct CSData
 {
@@ -15,5 +16,6 @@ struct CSData
         int remove_chance;
 };
 
-void ProcessCSData(CSData* cross_sections, int nsteps, string path_to_csdata);
+void processCSData(CSData* cross_sections, string path_to_csdata);
 
+__device__ int energyToIndex(double energy);

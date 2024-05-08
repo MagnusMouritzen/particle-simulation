@@ -513,6 +513,9 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
         total_added += *n_host - old_n_host;
         checkCudaError("Mobility steps");
 
+        // Check for overflow
+        if (*n_host >= capacity) printf("\n\nOVERFLOW FROM ADDING PARTICLES\n\n\n");
+
         // Remove dead particles
         cudaMemset(n, 0, sizeof(int));
         num_blocks_all = (min(*n_host, capacity) + block_size - 1) / block_size;

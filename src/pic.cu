@@ -371,13 +371,22 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     cudaMalloc(&d_cross_sections, 11 * sizeof(CSData));
     cudaMemcpy(d_cross_sections, cross_sections, 11 * sizeof(CSData), cudaMemcpyHostToDevice);
 
-    int num_blocks;
+    const int shared_mem_size_dynamic = 32 * sizeof(Electron);
+    const int shared_mem_size_naive = block_size * sizeof(Electron);
 
     int num_blocks_pers;
-    size_t dynamics_size = 16;
-    cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
-    cudaOccupancyMaxActiveBlocksPerMultiprocessor(&num_blocks_pers, dynamic, block_size, dynamics_size);
-    num_blocks_pers *= num_blocks; 
+    cudaDeviceGetAttribute(&num_blocks_pers, cudaDevAttrMultiProcessorCount, 0);
+    int blocks_per_sm = 1;
+    if (mode == 0) {
+        size_t dynamics_size = shared_mem_size_dynamic + 6 * 4;
+        cudaOccupancyMaxActiveBlocksPerMultiprocessor(&blocks_per_sm, dynamic, block_size, dynamics_size);
+    }
+    else if (mode == 3) {
+        size_t dynamics_size = 6 * 4;
+        cudaOccupancyMaxActiveBlocksPerMultiprocessor(&blocks_per_sm, dynamicOld, block_size, dynamics_size);
+    }
+    printf("Multiprocessor count: %d\nBlocks per multiprocessor: %d\n", num_blocks_pers, blocks_per_sm);
+    num_blocks_pers *= blocks_per_sm; 
 
     int num_blocks_rand;
     num_blocks_rand = (capacity + block_size - 1) / block_size;
@@ -419,9 +428,6 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     dim3 dim_block(8,8,8);
     dim3 dim_grid(Grid_Size.x/dim_block.x, Grid_Size.y/dim_block.y, Grid_Size.z/dim_block.z);
 
-    const int shared_mem_size_dynamic = 32 * sizeof(Electron);
-    const int shared_mem_size_naive = block_size * sizeof(Electron);
-
     switch(mode){
         case 0:
             timing_data.function = "Dynamic";
@@ -444,6 +450,9 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
 
     int source_index = 0;
     int destination_index = 0;
+
+    checkCudaError("Setup");
+
     for (int t = 0; t < poisson_steps; t++)
     {
         int num_blocks_all = (min(*n_host, capacity) + block_size - 1) / block_size;
@@ -456,17 +465,17 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
 
         // Grid operations
         resetGrid<<<dim_grid, dim_block>>>(d_grid, Grid_Size);
-        // cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
-        // checkCudaError("Reset grid");
+        cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
+        checkCudaError("Reset grid");
         particlesToGrid<<<num_blocks_all, block_size>>>(d_grid, &d_electrons[source_index], n, Grid_Size);
-        // cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
-        // checkCudaError("Particles to grid");
+        cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
+        checkCudaError("Particles to grid");
         updateGrid<<<dim_grid, dim_block>>>(d_grid, Electric_Force_Constant, Grid_Size);
-        // cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
-        // checkCudaError("Update grid");
+        cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
+        checkCudaError("Update grid");
         gridToParticles<<<num_blocks_all, block_size>>>(d_grid, &d_electrons[source_index], n, Grid_Size);
-        // cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
-        // checkCudaError("Grid to particles");
+        cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
+        checkCudaError("Grid to particles");
 
         int old_n_host = *n_host;
 

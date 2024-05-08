@@ -27,7 +27,9 @@ void processCSData(CSData* cross_sections, string path_to_csdata) {
     // }
 }
 
+// Take energies in the range [10⁻²; 10⁸[
+// Output in range [0; N_STEPS]
 __device__ int energyToIndex(double energy){
-    int energy_index = trunc(log10(energy));
-    return (energy_index < 0) ? 0 : ((energy_index > 10) ? 10 : energy_index);
+    int energy_index = trunc((log10(energy)+2)*N_STEPS);
+    return (energy_index < 0) ? 0 : ((energy_index >= N_STEPS) ? N_STEPS - 1 : energy_index);
 }

@@ -10,7 +10,7 @@ void processCSData(CSData* cross_sections, string path_to_csdata) {
     }
 
     for (int i = 0; i < N_STEPS; i++) {
-        if (ReadIn >> cross_sections[i].energy >> cross_sections[i].split_chance >> cross_sections[i].remove_chance) {
+        if (ReadIn >> cross_sections[i].split_chance >> cross_sections[i].remove_chance) {
             continue;
         } else {
             cerr << "Failed to read data for step " << i << endl;
@@ -18,7 +18,6 @@ void processCSData(CSData* cross_sections, string path_to_csdata) {
         }
     }
     // for (int i = 0; i < N_STEPS; i++) {
-    //     ReadIn >> cross_sections[i].energy;
     //     ReadIn >> cross_sections[i].split_chance;
     //     ReadIn >> cross_sections[i].remove_chance;
     //     cout<< cross_sections[i].energy<<endl;

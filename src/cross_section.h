@@ -11,9 +11,8 @@ using namespace std;
 struct CSData
 {
     public:
-        double energy;
-        int split_chance;
-        int remove_chance;
+        float split_chance;
+        float remove_chance;
 };
 
 void processCSData(CSData* cross_sections, string path_to_csdata);

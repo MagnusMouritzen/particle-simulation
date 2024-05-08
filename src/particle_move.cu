@@ -62,8 +62,8 @@ __device__ bool collider(Electron* electron, Electron* new_electron, float delta
 
     // printf("x %d, y %d, z %d, energy : %e, index %d \n", (int)(electron->position.x/cell_size), (int)(electron->position.y/cell_size), (int)(electron->position.z/cell_size), electron_energy, electron_energy_index);
     
-    int split_chance = d_cross_sections[electron_energy_index].split_chance;
-    int remove_chance = d_cross_sections[electron_energy_index].remove_chance;
+    float split_chance = d_cross_sections[electron_energy_index].split_chance;
+    float remove_chance = d_cross_sections[electron_energy_index].remove_chance;
     
     if (rand < split_chance) {
         spawned_new = true;

@@ -3,29 +3,34 @@ using namespace std;
 
 void runBenchmark(){
     vector<TimingData> data;
-    int init_ns[] = {100000};
+    int init_ns[] = {1000000};
     int block_sizes[] = {128,256,512,1024};
-    int max_ts[] = {10000};
-    int max_ns[] = {100000000};
+    int max_ts[] = {1};
+    int poisson_timesteps[] = {100};
+    int max_ns[] = {60000000};
     int functions[] = {0,1,2,3};
     int sleep_times[] = {100};
-    float collision_chances[] = {1};
+    //float collision_chances[] = {1};
 
-    for(int init_n : init_ns) {
+    float incr = 0.00001;
+    for(float collision_chance = incr; collision_chance <= 100; collision_chance += incr) {
+        if (collision_chance == incr * 10) incr *= 10;
         for(int block_size : block_sizes){
             for(int max_t : max_ts){
-                for(int max_n : max_ns){
-                    for(int sleep_time : sleep_times){
-                        for (float collision_chance : collision_chances){
-                            for(int function : functions){
-                                RunData run_data = runPIC(init_n, max_n, max_t, 1, function, 0, block_size, sleep_time, collision_chance);
-                                if (run_data.final_n >= max_n) {
-                                    //throw runtime_error("Illegal configuration, capacity reached!");
-                                    printf("\n\n\nIllegal!!!\n\n\n");
-                                    continue;
+                for (int poisson_timestep : poisson_timesteps){
+                    for(int max_n : max_ns){
+                        for(int sleep_time : sleep_times){
+                            for (int init_n : init_ns){
+                                for(int function : functions){
+                                    RunData run_data = runPIC(init_n, max_n, max_t, poisson_timestep, function, 0, block_size, sleep_time, collision_chance);
+                                    if (run_data.final_n >= max_n) {
+                                        //throw runtime_error("Illegal configuration, capacity reached!");
+                                        printf("\n\n\nIllegal!!!\n\n\n");
+                                        continue;
+                                    }
+                                    data.push_back(run_data.timing_data);
+                                    free(run_data.electrons);
                                 }
-                                data.push_back(run_data.timing_data);
-                                free(run_data.electrons);
                             }
                         }
                     }
@@ -33,7 +38,7 @@ void runBenchmark(){
             }
         }
     }
-    printCSV(data, "out/data/data.csv");
+    printCSV(data, "out/data/pic_cc_short.csv");
 }
 
 void runUnitTest(int init_n, int max_n, int max_t, int poisson_timestep, int verbose, int block_size, int sleep_time, float collision_chance){

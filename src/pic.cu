@@ -358,7 +358,6 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     for(int i = 0; i < N_STEPS; i++){
         cross_sections[i].split_chance *= collision_chance;
         cross_sections[i].remove_chance *= collision_chance;
-        if (i == 0) printf("Test %f %f\n", cross_sections[i].split_chance, cross_sections[i].remove_chance);
     }
     
     CSData* d_cross_sections;

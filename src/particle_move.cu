@@ -7,9 +7,9 @@ __global__ void setup_particles(Electron* d_electrons, curandState* d_rand_state
     int i = threadIdx.x+blockDim.x*blockIdx.x;
     if (i >= init_n) return;
     // d_electrons[i].position = make_float3(randFloat(&d_rand_states[i], 0, sim_size.x), randFloat(&d_rand_states[i], 1, sim_size.y), randFloat(&d_rand_states[i], 1, sim_size.z));
-    d_electrons[i].position = make_float3(randFloat(&d_rand_states[i], (grid_size.x / 2 - 10)*cell_size, (grid_size.x / 2 + 12)*cell_size), 
-                                          randFloat(&d_rand_states[i], (grid_size.y / 2 - 10)*cell_size, (grid_size.y / 2 + 12)*cell_size), 
-                                          randFloat(&d_rand_states[i], (grid_size.z / 2 - 10)*cell_size, (grid_size.z / 2 + 12)*cell_size));
+    d_electrons[i].position = make_float3(randFloat(&d_rand_states[i], (grid_size.x / 2 - 100)*cell_size, (grid_size.x / 2 + 102)*cell_size), 
+                                          randFloat(&d_rand_states[i], (grid_size.y / 2 - 100)*cell_size, (grid_size.y / 2 + 102)*cell_size), 
+                                          randFloat(&d_rand_states[i], (grid_size.z / 2 - 100)*cell_size, (grid_size.z / 2 + 102)*cell_size));
 
     // d_electrons[i].position = make_float3(randFloat(&d_rand_states[i], 0, (grid_size.x) * cell_size), 
     //                                       randFloat(&d_rand_states[i], 0, (grid_size.y) * cell_size), 

@@ -337,7 +337,7 @@ __global__ static void remove_dead_particles(Electron* d_electrons_old, Electron
 }
 
 RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timestep, int mode, int verbose, int block_size, int sleep_time_ns, float collision_chance) {
-    printf("PIC with\ninit n: %d\ncapacity: %d\npoisson steps: %d\npoisson_timestep: %d\nblock size: %d\nsleep time: %dCollision chance: %f\n", init_n, capacity, poisson_steps, poisson_timestep, block_size, sleep_time_ns, collision_chance);
+    printf("PIC with\ninit n: %d\ncapacity: %d\npoisson steps: %d\npoisson_timestep: %d\nblock size: %d\nsleep time: %d\nCollision chance: %f\n", init_n, capacity, poisson_steps, poisson_timestep, block_size, sleep_time_ns, collision_chance);
 
     TimingData timing_data;
     timing_data.init_n = init_n;

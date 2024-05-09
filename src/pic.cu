@@ -556,9 +556,11 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     cudaFree(d_electrons);
     cudaFree(d_cross_sections);
     cudaFree(n);
+    cudaFree(n_created);
     cudaFree(n_done);
     cudaFree(i_global);
     cudaFree(d_rand_states);
+    cudaFree(d_grid.ptr);
 
     return run_data;
 }

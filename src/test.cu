@@ -55,15 +55,16 @@ void runUnitTest(int init_n, int max_n, int max_t, int poisson_timestep, int ver
         int function = test_functions[fi];
         broken[fi] = false;
         RunData run_data = runPIC(init_n, max_n, max_t, poisson_timestep, function, verbose, block_size, sleep_time);
-        Electron* electrons = run_data.electrons;
         int final_n = run_data.final_n;
         final_ns[fi] = final_n;
         if (final_n != base_final_n){
             printf("\n\nFinal n does not match in %d. Base: %d, test: %d\n\n\n", function, base_final_n, final_n);
             broken[fi] = true;
+            free(run_data.electrons);
             continue;
         }
         
+        Electron* electrons = run_data.electrons;
         printf("Sorting %d...\n", function);
         sort(electrons, electrons + final_n);
         printf("Done sorting\n");
@@ -77,6 +78,7 @@ void runUnitTest(int init_n, int max_n, int max_t, int poisson_timestep, int ver
             }
             else if (verbose != 0 && i % verbose == 0) base_electrons[i].print(i);
         }
+        free(run_data.electrons);
     }
 
     printf("\nTests done with following results as compared to %d (%d):\n", base_function, base_final_n);

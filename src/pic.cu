@@ -16,7 +16,6 @@ __shared__ int n_block;
 __shared__ int new_i_block;
 
 __shared__ int buffer_lock;
-__shared__ int warps_active;
 
 __device__ __forceinline__ int lanemask_lt() {
     int lane = threadIdx.x & 31;
@@ -80,11 +79,13 @@ __global__ static void dynamic(Electron* d_electrons, float deltaTime, int* n, i
 
     if (threadIdx.x == 0) {
         n_block = 0;
-        warps_active = blockDim.x / 32;
     }
     __syncthreads();
 
     while (true){
+        if (is_done && has_new_electron){
+            printf("\n\nALARM!!!!\n\n\n");
+        }
         // If all threads in the warp have figured out that they are done, clean up and break.
         int done_mask = __ballot_sync(FULL_MASK, is_done);
         if (done_mask == FULL_MASK){
@@ -100,7 +101,7 @@ __global__ static void dynamic(Electron* d_electrons, float deltaTime, int* n, i
         wants_to_flush = false;
 
         // If anyone has created a new particle, it should be added to the buffer.
-        int has_new_electron_mask = __ballot_sync(~done_mask, has_new_electron);
+        int has_new_electron_mask = __ballot_sync(FULL_MASK, has_new_electron);
         if (has_new_electron_mask != 0){
             int new_electron_count = __popc(has_new_electron_mask);
             int rank = __popc(has_new_electron_mask & lanemask_lt());
@@ -114,28 +115,25 @@ __global__ static void dynamic(Electron* d_electrons, float deltaTime, int* n, i
                 if (LANE == 0){
                     atomicAdd(&n_block, new_electron_count);
                 }
-                has_new_electron = false;
             }
             else{  // Buffer will overflow, so flush before adding.
                 if (has_new_electron && cur_n_block + rank < 32){  // Fill it completely before flushing
                     new_particles_block[cur_n_block + rank] = new_electron;
                     has_new_electron = false;
                 }
-                if (*n < capacity){  // Hopefully this can't cause a desync
-                    int new_i_global;
-                    if (LANE == 0) new_i_global = atomicAdd(n, 32);
-                    new_i_global = __shfl_sync(FULL_MASK, new_i_global, 0) + LANE;
-                    if (new_i_global < capacity){
-                        uploadElectron(&d_electrons[new_i_global], new_particles_block[LANE], new_i_global);
-                    }
+                int new_i_global;
+                if (LANE == 0) new_i_global = atomicAdd(n, 32);
+                new_i_global = __shfl_sync(FULL_MASK, new_i_global, 0) + LANE;
+                if (new_i_global < capacity){
+                    uploadElectron(&d_electrons[new_i_global], new_particles_block[LANE], new_i_global);
                 }
                 __syncwarp();
                 if (has_new_electron) new_particles_block[rank - (32 - cur_n_block)] = new_electron;
-                has_new_electron = false;
                 __syncwarp();
                 if ((LANE == 0)) atomicExch(&n_block, new_electron_count - (32 - cur_n_block));
             }
             releaseLock(&buffer_lock);
+            has_new_electron = false;
         }
 
         // Update i_local for those in need.
@@ -158,8 +156,9 @@ __global__ static void dynamic(Electron* d_electrons, float deltaTime, int* n, i
 
         // Update particle, look for new work, or check for done.
         if (!is_done){
+            //if (threadIdx.x == 0) printf("%d\n", blockIdx.x);
             if (t == over_t){  // We don't have a particle and must load a new one
-                if (WARP != 0 && i_local >= capacity){
+                if (WARP != 0 && i_local >= capacity){  // We are past the capacity and no more work can be needed. WARP 0 must stay to handle flushing.
                     is_done = true;
                 }
                 else if (i_local < min(*n, capacity) && d_electrons[i_local].timestamp != 0){  // Check if the particle we are looking at is ready yet
@@ -205,15 +204,6 @@ __global__ static void dynamic(Electron* d_electrons, float deltaTime, int* n, i
                 }
             }
         }
-    }
-
-    // If we are the last warp to quite, flush buffer to ensure nothing is forgotten.
-    int leaving_index;
-    if (LANE == 0) leaving_index = atomicAdd(&warps_active, -1);
-    leaving_index = __shfl_sync(FULL_MASK, leaving_index, 0);
-
-    if (leaving_index == 1){
-        flush_buffer(d_electrons, new_particles_block, n, capacity);
     }
 }
 
@@ -378,11 +368,11 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     cudaDeviceGetAttribute(&num_blocks_pers, cudaDevAttrMultiProcessorCount, 0);
     int blocks_per_sm = 1;
     if (mode == 0) {
-        size_t dynamics_size = shared_mem_size_dynamic + 6 * 4;
+        size_t dynamics_size = shared_mem_size_dynamic + 5 * 4;
         cudaOccupancyMaxActiveBlocksPerMultiprocessor(&blocks_per_sm, dynamic, block_size, dynamics_size);
     }
     else if (mode == 3) {
-        size_t dynamics_size = 6 * 4;
+        size_t dynamics_size = 5 * 4;
         cudaOccupancyMaxActiveBlocksPerMultiprocessor(&blocks_per_sm, dynamicOld, block_size, dynamics_size);
     }
     printf("Multiprocessor count: %d\nBlocks per multiprocessor: %d\n", num_blocks_pers, blocks_per_sm);

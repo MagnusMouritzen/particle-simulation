@@ -363,6 +363,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     CSData* d_cross_sections;
     cudaMalloc(&d_cross_sections, N_STEPS * sizeof(CSData));
     cudaMemcpy(d_cross_sections, cross_sections, N_STEPS * sizeof(CSData), cudaMemcpyHostToDevice);
+    checkCudaError("CS Alloc");
 
     const int shared_mem_size_dynamic = 32 * sizeof(Electron);
     const int shared_mem_size_naive = block_size * sizeof(Electron);
@@ -389,12 +390,15 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
 
     curandState* d_rand_states;
     cudaMalloc(&d_rand_states, num_blocks_rand * block_size * sizeof(curandState));
+    checkCudaError("Alloc rand");
     setup_rand<<<num_blocks_rand, block_size>>>(d_rand_states);  // This has to be done before setup_particles
+    checkCudaError("Setup rand");
     
     Electron* h_electrons = (Electron *)calloc(capacity, sizeof(Electron));
     Electron* d_electrons;
     cudaMalloc(&d_electrons, 2 * capacity * sizeof(Electron));
     cudaMemset(d_electrons, 0, 2 * capacity * sizeof(Electron));
+    checkCudaError("Electron alloc");
     setup_particles<<<(init_n + block_size - 1) / block_size, block_size>>>(d_electrons, d_rand_states, init_n, Sim_Size, Grid_Size);
 
     int* n_host = (int*)malloc(sizeof(int));
@@ -402,6 +406,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     cudaMalloc(&n, sizeof(int));
     *n_host = init_n;
     cudaMemcpy(n, n_host, sizeof(int), cudaMemcpyHostToDevice);
+    checkCudaError("Setup particles");
 
     int* n_done;
     cudaMalloc(&n_done, sizeof(int));
@@ -412,11 +417,13 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     
     int* i_global;
     cudaMalloc(&i_global, sizeof(int));
+    checkCudaError("Minor alloc");
 
 
     cudaExtent extent = make_cudaExtent(Grid_Size.x * sizeof(Cell), Grid_Size.y, Grid_Size.z);
     cudaPitchedPtr d_grid;
     cudaMalloc3D(&d_grid, extent);
+    checkCudaError("Grid alloc");
 
     dim3 dim_block(8,8,8);
     dim3 dim_grid(Grid_Size.x/dim_block.x, Grid_Size.y/dim_block.y, Grid_Size.z/dim_block.z);

@@ -398,11 +398,15 @@ RunData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, 
             printf("Multiply static simple iterate\n");
             timing_data.function = "Static simple iterate";
             int num_blocks;
+            int numBlocksPerSm;
+
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
+            cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksPerSm, updateStatic, block_size, 0);
+
             printf("Number of blocks: %d \n",num_blocks);
             cudaEventRecord(start);
             for (int t = 1; t <= max_t; t++) {
-                updateStatic<<<num_blocks, block_size>>>(electrons, delta_time, n, capacity, t);
+                updateStatic<<<num_blocks*numBlocksPerSm, block_size>>>(electrons, delta_time, n, capacity, t);
                 log(verbose, t, electrons_host, electrons, n_host, n, capacity);
             }
             cudaEventRecord(stop);
@@ -454,12 +458,15 @@ RunData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, 
             printf("Multiply GPU Iterate with global memory barrier \n");
             timing_data.function = "GPU Iterate Global Memory";
             int num_blocks;
+            int numBlocksPerSm;
+            cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksPerSm, updateNormalPersistentWithGlobal, block_size, 0);
+
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
             printf("Number of blocks: %d \n",num_blocks);
 
             cudaEventRecord(start);
 
-            updateNormalPersistentWithGlobal<<<num_blocks, block_size>>>(electrons, delta_time, n, init_n, capacity, max_t, waitCounter, sleep_time_ns);
+            updateNormalPersistentWithGlobal<<<num_blocks*numBlocksPerSm, block_size>>>(electrons, delta_time, n, init_n, capacity, max_t, waitCounter, sleep_time_ns);
             cudaEventRecord(stop);
             
             log(verbose, max_t, electrons_host, electrons, n_host, n, capacity);
@@ -475,7 +482,7 @@ RunData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, 
             int numThreads = block_size;
             cudaDeviceProp deviceProp;
             cudaGetDeviceProperties(&deviceProp, 0);
-            cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksPerSm, updateStatic, numThreads, 0);
+            cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksPerSm, updateStatic, block_size, 0);
 
             cudaEventRecord(start);
             
@@ -498,12 +505,15 @@ RunData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, 
             printf("Multiply GPU Iterate with global memory barrier organised\n");
             timing_data.function = "GPU Iterate Global Memory Organised";
             int num_blocks;
+            int numBlocksPerSm;
+            cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksPerSm, updateNormalPersistentWithOrganisedGlobal, block_size, 0);
+
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
             printf("Number of blocks: %d \n",num_blocks);
 
             cudaEventRecord(start);
 
-            updateNormalPersistentWithOrganisedGlobal<<<num_blocks, block_size>>>(electrons, delta_time, n, init_n, capacity, max_t, waitCounter, sleep_time_ns);
+            updateNormalPersistentWithOrganisedGlobal<<<num_blocks*numBlocksPerSm, block_size>>>(electrons, delta_time, n, init_n, capacity, max_t, waitCounter, sleep_time_ns);
 
             cudaEventRecord(stop);
             
@@ -520,7 +530,7 @@ RunData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, 
             int numThreads = block_size;
             cudaDeviceProp deviceProp;
             cudaGetDeviceProperties(&deviceProp, 0);
-            cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksPerSm, updateStatic, numThreads, 0);
+            cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksPerSm, updateStatic, block_size, 0);
 
             cudaEventRecord(start);
             dim3 dimBlock(numThreads, 1, 1);
@@ -541,12 +551,15 @@ RunData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, 
             printf("Multiply Static GPU Full\n");
             timing_data.function = "Static GPU Full";
             int num_blocks;
+            int numBlocksPerSm;
+            cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksPerSm, updateGPUIterate, block_size, 0);
+
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
             printf("Number of blocks: %d \n",num_blocks);
 
             cudaEventRecord(start);
 
-            updateGPUIterate<<<num_blocks, block_size>>>(electrons, delta_time, n, capacity, max_t, waitCounter, sleep_time_ns, n_done);
+            updateGPUIterate<<<num_blocks*numBlocksPerSm, block_size>>>(electrons, delta_time, n, capacity, max_t, waitCounter, sleep_time_ns, n_done);
             
             cudaEventRecord(stop);
             
@@ -564,7 +577,7 @@ RunData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, 
             int numThreads = block_size;
             cudaDeviceProp deviceProp;
             cudaGetDeviceProperties(&deviceProp, 0);
-            cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksPerSm, updateStatic, numThreads, 0);
+            cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksPerSm, updateGPUIterate, block_size, 0);
 
             cudaEventRecord(start);
 
@@ -587,12 +600,15 @@ RunData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, 
             timing_data.function = "Dynamic with threads";
 
             int num_blocks;
+            int numBlocksPerSm;
+            cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksPerSm, updateDynamicThreads, block_size, 0);
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
+            
             printf("Number of blocks: %d \n",num_blocks);
 
             cudaEventRecord(start);
 
-            updateDynamicThreads<<<num_blocks, block_size>>>(electrons, delta_time, n, capacity, max_t, waitCounter, sleep_time_ns, n_done, i_global);
+            updateDynamicThreads<<<num_blocks*numBlocksPerSm, block_size>>>(electrons, delta_time, n, capacity, max_t, waitCounter, sleep_time_ns, n_done, i_global);
             cudaEventRecord(stop);
             
             log(verbose, max_t, electrons_host, electrons, n_host, n, capacity);
@@ -604,6 +620,8 @@ RunData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, 
             timing_data.function = "Dynamic with blocks";
 
             int num_blocks;
+            int numBlocksPerSm;
+            cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksPerSm, updateDynamicBlocks, block_size, 0);
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
             printf("Number of blocks: %d \n",num_blocks);
 
@@ -613,7 +631,7 @@ RunData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, 
 
             cudaEventRecord(start);
 
-            updateDynamicBlocks<<<num_blocks, block_size>>>(electrons, delta_time, n, capacity, max_t, waitCounter, sleep_time_ns, n_done, i_global, i_blocks);
+            updateDynamicBlocks<<<num_blocks*numBlocksPerSm, block_size>>>(electrons, delta_time, n, capacity, max_t, waitCounter, sleep_time_ns, n_done, i_global, i_blocks);
             cudaEventRecord(stop);
 
             log(verbose, max_t, electrons_host, electrons, n_host, n, capacity);

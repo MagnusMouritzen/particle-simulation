@@ -10,7 +10,6 @@
 #define WARP (threadIdx.x >> 5)
 
 __shared__ int i_block;
-__shared__ int capacity;
 
 __shared__ int n_block;
 __shared__ int new_i_block;
@@ -79,13 +78,11 @@ __global__ static void dynamic(Electron* d_electrons, float deltaTime, int* n, i
 
     if (threadIdx.x == 0) {
         n_block = 0;
+        buffer_lock = 0;
     }
     __syncthreads();
 
     while (true){
-        if (is_done && has_new_electron){
-            printf("\n\nALARM!!!!\n\n\n");
-        }
         // If all threads in the warp have figured out that they are done, clean up and break.
         int done_mask = __ballot_sync(FULL_MASK, is_done);
         if (done_mask == FULL_MASK){
@@ -156,7 +153,6 @@ __global__ static void dynamic(Electron* d_electrons, float deltaTime, int* n, i
 
         // Update particle, look for new work, or check for done.
         if (!is_done){
-            //if (threadIdx.x == 0) printf("%d\n", blockIdx.x);
             if (t == over_t){  // We don't have a particle and must load a new one
                 if (WARP != 0 && i_local >= capacity){  // We are past the capacity and no more work can be needed. WARP 0 must stay to handle flushing.
                     is_done = true;
@@ -368,11 +364,11 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     cudaDeviceGetAttribute(&num_blocks_pers, cudaDevAttrMultiProcessorCount, 0);
     int blocks_per_sm = 1;
     if (mode == 0) {
-        size_t dynamics_size = shared_mem_size_dynamic + 5 * 4;
+        size_t dynamics_size = shared_mem_size_dynamic + 4 * 4;
         cudaOccupancyMaxActiveBlocksPerMultiprocessor(&blocks_per_sm, dynamic, block_size, dynamics_size);
     }
     else if (mode == 3) {
-        size_t dynamics_size = 5 * 4;
+        size_t dynamics_size = 4 * 4;
         cudaOccupancyMaxActiveBlocksPerMultiprocessor(&blocks_per_sm, dynamicOld, block_size, dynamics_size);
     }
     printf("Multiprocessor count: %d\nBlocks per multiprocessor: %d\n", num_blocks_pers, blocks_per_sm);

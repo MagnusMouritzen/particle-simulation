@@ -340,14 +340,15 @@ __global__ static void remove_dead_particles(Electron* d_electrons_old, Electron
     d_electrons_new[i_block + i_local].timestamp = -1;
 }
 
-RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timestep, int mode, int verbose, int block_size, int sleep_time_ns) {
-    printf("PIC with\ninit n: %d\ncapacity: %d\npoisson steps: %d\npoisson_timestep: %d\nblock size: %d\nsleep time: %d\n", init_n, capacity, poisson_steps, poisson_timestep, block_size, sleep_time_ns);
+RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timestep, int mode, int verbose, int block_size, int sleep_time_ns, float collision_chance) {
+    printf("PIC with\ninit n: %d\ncapacity: %d\npoisson steps: %d\npoisson_timestep: %d\nblock size: %d\nsleep time: %dCollision chance: %f\n", init_n, capacity, poisson_steps, poisson_timestep, block_size, sleep_time_ns, collision_chance);
 
     TimingData timing_data;
     timing_data.init_n = init_n;
     timing_data.iterations = poisson_steps;
     timing_data.block_size = block_size;
     timing_data.sleep_time = sleep_time_ns;
+    timing_data.split_chance = collision_chance;
 
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
@@ -356,6 +357,13 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     CSData* cross_sections = (CSData*)malloc(sizeof(CSData)*N_STEPS);
     processCSData(cross_sections, "./src/cross_section.txt");
 
+    // Modify CSData
+    collision_chance /= 100;
+    for(int i = 0; i < N_STEPS; i++){
+        cross_sections[i].split_chance *= collision_chance;
+        cross_sections[i].remove_chance *= collision_chance;
+        if (i == 0) printf("Test %f %f\n", cross_sections[i].split_chance, cross_sections[i].remove_chance);
+    }
     
     CSData* d_cross_sections;
     cudaMalloc(&d_cross_sections, N_STEPS * sizeof(CSData));

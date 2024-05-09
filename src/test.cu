@@ -9,23 +9,25 @@ void runBenchmark(){
     int max_ns[] = {100000000};
     int functions[] = {0,1,2,3};
     int sleep_times[] = {100};
+    float collision_chances[] = {1};
 
     for(int init_n : init_ns) {
         for(int block_size : block_sizes){
             for(int max_t : max_ts){
                 for(int max_n : max_ns){
                     for(int sleep_time : sleep_times){
-                        for(int function : functions){
-                            RunData run_data = runPIC(init_n, max_n, max_t, 1, function, 0, block_size, sleep_time);
-                            if (run_data.final_n >= max_n) {
-                                //throw runtime_error("Illegal configuration, capacity reached!");
-                                printf("\n\n\nIllegal!!!\n\n\n");
-                                continue;
+                        for (float collision_chance : collision_chances){
+                            for(int function : functions){
+                                RunData run_data = runPIC(init_n, max_n, max_t, 1, function, 0, block_size, sleep_time, collision_chance);
+                                if (run_data.final_n >= max_n) {
+                                    //throw runtime_error("Illegal configuration, capacity reached!");
+                                    printf("\n\n\nIllegal!!!\n\n\n");
+                                    continue;
+                                }
+                                data.push_back(run_data.timing_data);
+                                free(run_data.electrons);
                             }
-                            data.push_back(run_data.timing_data);
-                            free(run_data.electrons);
                         }
-                        
                     }
                 }
             }
@@ -34,7 +36,7 @@ void runBenchmark(){
     printCSV(data, "out/data/data.csv");
 }
 
-void runUnitTest(int init_n, int max_n, int max_t, int poisson_timestep, int verbose, int block_size, int sleep_time){
+void runUnitTest(int init_n, int max_n, int max_t, int poisson_timestep, int verbose, int block_size, int sleep_time, float collision_chance){
     // How I ran it:
     // run test 0 1 200 256 10000000 100
     int base_function = 0;
@@ -44,7 +46,7 @@ void runUnitTest(int init_n, int max_n, int max_t, int poisson_timestep, int ver
     bool broken[amnt];
     int final_ns[amnt];
 
-    RunData base_run_data = runPIC(init_n, max_n, max_t, poisson_timestep, base_function, verbose, block_size, sleep_time);
+    RunData base_run_data = runPIC(init_n, max_n, max_t, poisson_timestep, base_function, verbose, block_size, sleep_time, collision_chance);
     Electron* base_electrons = base_run_data.electrons;
     int base_final_n = base_run_data.final_n;
     printf("Sorting base...\n");
@@ -54,7 +56,7 @@ void runUnitTest(int init_n, int max_n, int max_t, int poisson_timestep, int ver
     for(int fi = 0; fi < amnt; fi++){
         int function = test_functions[fi];
         broken[fi] = false;
-        RunData run_data = runPIC(init_n, max_n, max_t, poisson_timestep, function, verbose, block_size, sleep_time);
+        RunData run_data = runPIC(init_n, max_n, max_t, poisson_timestep, function, verbose, block_size, sleep_time, collision_chance);
         Electron* electrons = run_data.electrons;
         int final_n = run_data.final_n;
         final_ns[fi] = final_n;

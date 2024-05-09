@@ -6,7 +6,7 @@
 
 using namespace std;
 
-#define N_STEPS 11
+#define N_STEPS 10000
 
 struct CSData
 {

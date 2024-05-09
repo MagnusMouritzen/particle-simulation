@@ -20,26 +20,27 @@ int main(int argc, char **argv) {
     int max_n = boost::lexical_cast<int>(argv[6]);
     int sleep_time = boost::lexical_cast<int>(argv[7]);
     int poisson_timestep = boost::lexical_cast<int>(argv[8]);
+    float collision_chance = boost::lexical_cast<float>(argv[9]);
     
     // Dynamic
     if (!strcmp(argv[1], "30")){
-        runPIC(init_n, max_n, max_t, poisson_timestep, 0, verbose, block_size, sleep_time);
+        runPIC(init_n, max_n, max_t, poisson_timestep, 0, verbose, block_size, sleep_time, collision_chance);
     }
     // CPUSynch
     else if (!strcmp(argv[1], "31")){
-        runPIC(init_n, max_n, max_t, poisson_timestep, 1, verbose, block_size, sleep_time);
+        runPIC(init_n, max_n, max_t, poisson_timestep, 1, verbose, block_size, sleep_time, collision_chance);
     }
     // Naive
     else if (!strcmp(argv[1], "32")){
-        runPIC(init_n, max_n, max_t, poisson_timestep, 2, verbose, block_size, sleep_time);
+        runPIC(init_n, max_n, max_t, poisson_timestep, 2, verbose, block_size, sleep_time, collision_chance);
     }
     // Dynamic Old
     else if (!strcmp(argv[1], "33")){
-        runPIC(init_n, max_n, max_t, poisson_timestep, 3, verbose, block_size, sleep_time);
+        runPIC(init_n, max_n, max_t, poisson_timestep, 3, verbose, block_size, sleep_time, collision_chance);
     }
     // Test
     else if (!strcmp(argv[1], "test")){
-        runUnitTest(init_n, max_n, max_t, poisson_timestep, verbose, block_size, sleep_time);
+        runUnitTest(init_n, max_n, max_t, poisson_timestep, verbose, block_size, sleep_time, collision_chance);
     }
     double time = end_cpu_timer(start);
     printf("CPU time of program: %f ms\n", time);

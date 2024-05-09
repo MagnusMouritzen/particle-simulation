@@ -85,7 +85,7 @@ double end_cpu_timer(chrono::time_point<high_resolution_clock> start){
 }
 
 void printTimingHeader(FILE* os){
-    fprintf(os, "func,init n,iterations,block size,sleep time,split chance,final n,time\n");
+    fprintf(os, "func,init n,iterations,block size,sleep time,collision chance,final n,time\n");
 }
 
 void printTimingData(const TimingData& data, FILE* os){

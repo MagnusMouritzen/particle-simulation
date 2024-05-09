@@ -431,15 +431,19 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     switch(mode){
         case 0:
             timing_data.function = "Dynamic";
+            printf("Dynamic\n");
             break;
         case 1:
             timing_data.function = "CPU Sync";
+            printf("CPU Sync\n");
             break;
         case 2:
             timing_data.function = "Naive";
+            printf("Naive\n");
             break;
         case 3:
             timing_data.function = "Dynamic Old";
+            printf("Dynamic Old\n");
             break;
     }
 

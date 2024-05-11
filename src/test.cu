@@ -3,10 +3,10 @@ using namespace std;
 
 void runBenchmark(){
     vector<TimingData> data;
-    int init_ns[] = {1000000};
+    int init_ns[] = {100000};
     int block_sizes[] = {128,256,512,1024};
     int max_ts[] = {1};
-    int poisson_timesteps[] = {100};
+    int poisson_timesteps[] = {1000};
     int max_ns[] = {60000000};
     int functions[] = {0,1,2,3};
     int sleep_times[] = {100};
@@ -40,7 +40,7 @@ void runBenchmark(){
             }
         }
     }
-    printCSV(data, "out/data/pic_cc_short.csv");
+    printCSV(data, "out/data/pic_cc_long.csv");
 }
 
 void runUnitTest(int init_n, int max_n, int max_t, int poisson_timestep, int verbose, int block_size, int sleep_time, float collision_chance){

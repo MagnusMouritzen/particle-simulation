@@ -2,6 +2,7 @@
 #include <cuda_runtime.h>
 #include "multiply_simulation.h"
 #include <cooperative_groups.h>
+#include <iostream>
 using namespace cooperative_groups; 
 
 __device__ static void simulate(Electron* electrons, float deltaTime, int* n, int capacity, int i, int t){
@@ -335,7 +336,7 @@ RunData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, 
     
     Electron* electrons_host = (Electron *)calloc(capacity, sizeof(Electron));
     for(int i=0; i<init_n; i++) {
-        electrons_host[i].position = make_float3(250, 250, 1.0);
+        electrons_host[i].position = make_float3(250, 1+(495/init_n)*i, 1.0);
         electrons_host[i].weight = 1.0;
         electrons_host[i].timestamp = -1;
     }
@@ -400,10 +401,22 @@ RunData multiplyRun(int init_n, int capacity, int max_t, int mode, int verbose, 
             int num_blocks;
             int numBlocksPerSm;
 
+            // cudaDeviceProp prop;
+
+            // cudaGetDeviceProperties(&prop, 0);
+
+            // std::cout << "Device Name: " << prop.name << std::endl;
+            // std::cout << "Total Shared Memory per Block: " << prop.sharedMemPerBlock << " bytes" << std::endl;
+            // std::cout << "Shared Memory per SM: " << prop.sharedMemPerMultiprocessor << " bytes" << std::endl;
+            // std::cout << "Total Registers per Block: " << prop.regsPerBlock << std::endl;
+            // std::cout << "Registers per SM: " << prop.regsPerMultiprocessor << std::endl;
+            // std::cout << "Number of SMs: " << prop.multiProcessorCount << std::endl;
+
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
             cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksPerSm, updateStatic, block_size, 0);
 
             printf("Number of blocks: %d \n",num_blocks);
+            printf("Number of blocks pr sm: %d \n",numBlocksPerSm);
             cudaEventRecord(start);
             for (int t = 1; t <= max_t; t++) {
                 updateStatic<<<num_blocks*numBlocksPerSm, block_size>>>(electrons, delta_time, n, capacity, t);

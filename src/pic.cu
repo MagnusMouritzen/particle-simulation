@@ -345,6 +345,8 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     timing_data.block_size = block_size;
     timing_data.sleep_time = sleep_time_ns;
 
+    float mobility_timestep = 1e-12;
+
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
@@ -479,14 +481,14 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
         // Simulate
         switch(mode){
             case 0:{  // Dynamic
-                dynamic<<<num_blocks_pers, block_size, shared_mem_size_dynamic>>>(&d_electrons[source_index], 0.0001, n, capacity, d_rand_states, poisson_timestep, sleep_time_ns, n_created, n_done, i_global, Sim_Size, d_cross_sections);
+                dynamic<<<num_blocks_pers, block_size, shared_mem_size_dynamic>>>(&d_electrons[source_index], mobility_timestep, n, capacity, d_rand_states, poisson_timestep, sleep_time_ns, n_created, n_done, i_global, Sim_Size, d_cross_sections);
                 break;
             }
             case 1:{  // CPU Sync
                 int last_n = 0;  // The amount of particles present in last run. All of these have been fully simulated.
                 while(min(*n_host, capacity) != last_n){  // Stop once nothing new has happened.
                     int num_blocks = (min(*n_host, capacity) - last_n + block_size - 1) / block_size;  // We do not need blocks for the old particles.
-                    cpuSync<<<num_blocks, block_size>>>(&d_electrons[source_index], 0.0001, n, min(*n_host, capacity), last_n, capacity, d_rand_states, poisson_timestep, Sim_Size, d_cross_sections);
+                    cpuSync<<<num_blocks, block_size>>>(&d_electrons[source_index], mobility_timestep, n, min(*n_host, capacity), last_n, capacity, d_rand_states, poisson_timestep, Sim_Size, d_cross_sections);
                     last_n = min(*n_host, capacity);  // Update last_n to the amount just run. NOT to the amount after this run (we don't know that amount yet).
                     cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Now update to the current amount of particles.
                 }
@@ -495,14 +497,14 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
             case 2:{  // Naive
                 for (int mob_t = 1; mob_t <= poisson_timestep; mob_t++){
                     int num_blocks = (min(*n_host, capacity) + block_size - 1) / block_size;
-                    naive<<<num_blocks, block_size, shared_mem_size_naive>>>(&d_electrons[source_index], 0.0001, n, min(*n_host, capacity), capacity, d_rand_states, mob_t, Sim_Size, d_cross_sections);
+                    naive<<<num_blocks, block_size, shared_mem_size_naive>>>(&d_electrons[source_index], mobility_timestep, n, min(*n_host, capacity), capacity, d_rand_states, mob_t, Sim_Size, d_cross_sections);
                     log(verbose, t, h_electrons, d_electrons, n_host, n, capacity);
                     cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
                 }
                 break;
             }
             case 3:{  // Dynamic Old
-                dynamicOld<<<num_blocks_pers, block_size>>>(&d_electrons[source_index], 0.0001, n, capacity, d_rand_states, poisson_timestep, sleep_time_ns, n_done, i_global, Sim_Size, d_cross_sections);
+                dynamicOld<<<num_blocks_pers, block_size>>>(&d_electrons[source_index], mobility_timestep, n, capacity, d_rand_states, poisson_timestep, sleep_time_ns, n_done, i_global, Sim_Size, d_cross_sections);
                 break;
             }
         }

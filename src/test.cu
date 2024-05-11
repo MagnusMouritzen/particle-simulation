@@ -13,7 +13,7 @@ void runBenchmark(){
     //float collision_chances[] = {1};
 
     int incr = 1;
-    for(int collision_chance_int = incr; collision_chance_int <= 100; collision_chance_int += incr) {
+    for(int collision_chance_int = incr; collision_chance_int <= 1000000; collision_chance_int += incr) {
         if (collision_chance_int == incr * 10) incr *= 10;
         float collision_chance = 0.00001 * collision_chance_int;
         for(int block_size : block_sizes){

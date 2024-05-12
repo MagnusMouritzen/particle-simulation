@@ -537,7 +537,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     checkCudaError("After sim");
 
     cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
-    cudaMemcpy(h_electrons, d_electrons, min(*n_host, capacity) * sizeof(Electron), cudaMemcpyDeviceToHost);   
+    cudaMemcpy(h_electrons, &d_electrons[destination_index], min(*n_host, capacity) * sizeof(Electron), cudaMemcpyDeviceToHost);   
 
     cudaEventSynchronize(stop);
     float runtime_ms = 0;

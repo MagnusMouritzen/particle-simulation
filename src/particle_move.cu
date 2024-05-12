@@ -6,16 +6,18 @@ using namespace std;
 __global__ void setup_particles(Electron* d_electrons, curandState* d_rand_states, int init_n, float3 sim_size, int3 grid_size) {
     int i = threadIdx.x+blockDim.x*blockIdx.x;
     if (i >= init_n) return;
-    d_electrons[i].position = make_float3(randFloat(&d_rand_states[i], 0, sim_size.x), randFloat(&d_rand_states[i], 1, sim_size.y), randFloat(&d_rand_states[i], 1, sim_size.z));
-    d_electrons[i].position = make_float3(randFloat(&d_rand_states[i], (grid_size.x / 2 - 30)*cell_size, (grid_size.x / 2 + 32)*cell_size), 
+    Electron electron;
+    electron.position = make_float3(randFloat(&d_rand_states[i], 0, sim_size.x), randFloat(&d_rand_states[i], 1, sim_size.y), randFloat(&d_rand_states[i], 1, sim_size.z));
+    electron.position = make_float3(randFloat(&d_rand_states[i], (grid_size.x / 2 - 30)*cell_size, (grid_size.x / 2 + 32)*cell_size), 
                                           randFloat(&d_rand_states[i], (grid_size.y / 2 - 30)*cell_size, (grid_size.y / 2 + 32)*cell_size), 
                                           randFloat(&d_rand_states[i], (grid_size.z / 2 - 30)*cell_size, (grid_size.z / 2 + 32)*cell_size));
 
-    // d_electrons[i].position = make_float3(randFloat(&d_rand_states[i], 0, (grid_size.x) * cell_size), 
+    // electron.position = make_float3(randFloat(&d_rand_states[i], 0, (grid_size.x) * cell_size), 
     //                                       randFloat(&d_rand_states[i], 0, (grid_size.y) * cell_size), 
     //                                       randFloat(&d_rand_states[i], 0, (grid_size.z) * cell_size));
-    // printf("x %d, y %d, z %d \n", (int)(d_electrons[i].position.x/cell_size), (int)(d_electrons[i].position.y/cell_size), (int)(d_electrons[i].position.z/cell_size));
-    d_electrons[i].timestamp = -1;
+    // printf("x %d, y %d, z %d \n", (int)(electron.position.x/cell_size), (int)(electron.position.y/cell_size), (int)(electron.position.z/cell_size));
+    electron.timestamp = -1;
+    d_electrons[i] = electron;
 }
 
 __device__ void leapfrog(Electron* electron, float delta_time){

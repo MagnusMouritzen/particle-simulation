@@ -11,14 +11,13 @@ using namespace std;
 
 struct Electron {
     public:
-        float3 position;
-        float3 velocity;
-        float3 acceleration;
+        double3 position;
+        double3 velocity;
+        double3 acceleration;
         int timestamp;
-        float3 og;
 
         __host__ void print(){
-            printf("(%.6f, %.6f, %.6f) | (%.6f, %.6f, %.6f) (%.6f, %.6f, %.6f) ((%.6f, %.6f, %.6f)) [%d]\n", og.x, og.y, og.z, position.x, position.y, position.z, velocity.x, velocity.y, velocity.z, acceleration.x, acceleration.y, acceleration.z, timestamp);
+            printf("(%.6f, %.6f, %.6f) (%.6f, %.6f, %.6f) ((%.6f, %.6f, %.6f)) [%d]\n", position.x, position.y, position.z, velocity.x, velocity.y, velocity.z, acceleration.x, acceleration.y, acceleration.z, timestamp);
         }
 
         __host__ void print(int i){
@@ -26,8 +25,8 @@ struct Electron {
             print();
         }
 
-        __host__ tuple<float, float, float, int, float, float, float, float, float, float> getKey() const {
-            return make_tuple(og.x, og.y, og.z, timestamp, position.y, position.x, position.z, velocity.y, velocity.x, velocity.z);
+        __host__ tuple<int, double, double, double, double, double, double> getKey() const {
+            return make_tuple(timestamp, position.y, position.x, position.z, velocity.y, velocity.x, velocity.z);
         }
 
         __host__ bool operator<(const Electron& other){

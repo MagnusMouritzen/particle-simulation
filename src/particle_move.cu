@@ -6,6 +6,8 @@ using namespace std;
 __global__ void setup_particles(Electron* d_electrons, curandState* d_rand_states, int init_n, float3 sim_size, int3 grid_size) {
     int i = threadIdx.x+blockDim.x*blockIdx.x;
     if (i >= init_n) return;
+    newRandState(&d_rand_states[i], i);
+
     Electron electron;
     electron.position = make_float3(randFloat(&d_rand_states[i], 0, sim_size.x), randFloat(&d_rand_states[i], 1, sim_size.y), randFloat(&d_rand_states[i], 1, sim_size.z));
     electron.position = make_float3(randFloat(&d_rand_states[i], (grid_size.x / 2 - 30)*cell_size, (grid_size.x / 2 + 32)*cell_size), 
@@ -17,6 +19,7 @@ __global__ void setup_particles(Electron* d_electrons, curandState* d_rand_state
     //                                       randFloat(&d_rand_states[i], 0, (grid_size.z) * cell_size));
     // printf("x %d, y %d, z %d \n", (int)(electron.position.x/cell_size), (int)(electron.position.y/cell_size), (int)(electron.position.z/cell_size));
     electron.timestamp = -1;
+    electron.og = electron.position;
     d_electrons[i] = electron;
 }
 
@@ -52,7 +55,7 @@ __device__ bool checkOutOfBounds(Electron* electron, float3 sim_size){
      return false;
 }
 
-__device__ bool collider(Electron* electron, Electron* new_electron, float delta_time, curandState* rand_state, int i, int t, CSData* d_cross_sections){
+__device__ bool collider(Electron* electron, Electron* new_electron, curandState* new_rand_state, float delta_time, curandState* rand_state, int i, int t, CSData* d_cross_sections){
     bool spawned_new = false;
     float rand = randFloat(rand_state, 0, 100);
 
@@ -74,6 +77,10 @@ __device__ bool collider(Electron* electron, Electron* new_electron, float delta
         electron->velocity.x = -electron->velocity.x;
         electron->velocity.y = -electron->velocity.y;
         electron->velocity.z = -electron->velocity.z;
+
+        new_electron->og = new_electron-> position;
+
+        newRandState(new_rand_state, randInt(rand_state, 0, 2000000000)+100000000);
     }
     else if (rand < remove_chance + split_chance){
         electron->timestamp = DEAD;
@@ -81,8 +88,8 @@ __device__ bool collider(Electron* electron, Electron* new_electron, float delta
     return spawned_new;
 }
 
-__device__ bool updateParticle(Electron* electron, Electron* new_electron, float delta_time, curandState* rand_state, int i, int t, float3 sim_size, CSData* d_cross_sections) {
+__device__ bool updateParticle(Electron* electron, Electron* new_electron, curandState* new_rand_state, float delta_time, curandState* rand_state, int i, int t, float3 sim_size, CSData* d_cross_sections) {
     leapfrog(electron, delta_time);
     if (checkOutOfBounds(electron, sim_size)) return false;
-    return collider(electron, new_electron, delta_time, rand_state, i, t, d_cross_sections);
+    return collider(electron, new_electron, new_rand_state, delta_time, rand_state, i, t, d_cross_sections);
 }

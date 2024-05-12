@@ -61,11 +61,10 @@ __device__ void flush_buffer(Electron* d_electrons, Electron* new_particles_bloc
     releaseLock(&buffer_lock);
 }
 
-__global__ static void dynamic(Electron* d_electrons, float deltaTime, int* n, int capacity, curandState* d_rand_states, int poisson_timestep, int sleep_time_ns, int* n_created, int* n_done, int* i_global, float3 sim_size, CSData* d_cross_sections) {
+__global__ static void dynamic(Electron* d_electrons, float deltaTime, int* n, int capacity, int poisson_timestep, int sleep_time_ns, int* n_created, int* n_done, int* i_global, float3 sim_size, CSData* d_cross_sections) {
     //int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
     extern __shared__ Electron new_particles_block[];
 
-    curandState rand_state;// = d_rand_states[thread_id];
     Electron electron;
     Electron new_electron;
     bool has_new_electron = false;
@@ -86,7 +85,6 @@ __global__ static void dynamic(Electron* d_electrons, float deltaTime, int* n, i
         // If all threads in the warp have figured out that they are done, clean up and break.
         int done_mask = __ballot_sync(FULL_MASK, is_done);
         if (done_mask == FULL_MASK){
-            //d_rand_states[thread_id] = rand_state;
             break;
         }
 
@@ -165,7 +163,6 @@ __global__ static void dynamic(Electron* d_electrons, float deltaTime, int* n, i
                     }
                     else{
                         electron = d_electrons[i_local];
-                        rand_state = d_rand_states[i_local];
                         t =  max(1, electron.timestamp + 1);
                     }
                 }
@@ -188,11 +185,10 @@ __global__ static void dynamic(Electron* d_electrons, float deltaTime, int* n, i
 
             if (t != over_t)  // Check needed again because we might not have loaded a new particle
             {
-                has_new_electron = updateParticle(&electron, &new_electron, deltaTime, &rand_state, i_local, t, sim_size, d_cross_sections);
+                has_new_electron = updateParticle(&electron, &new_electron, deltaTime, i_local, t, sim_size, d_cross_sections);
                 if (has_new_electron) atomicAdd(n_created, 1);
                 if (++t == over_t || electron.timestamp == DEAD){  // Particle done with this simulation
                     d_electrons[i_local] = electron;
-                    d_rand_states[i_local] = rand_state;
                     t = over_t;
                     needs_new_i = true;
                     __threadfence();
@@ -203,13 +199,13 @@ __global__ static void dynamic(Electron* d_electrons, float deltaTime, int* n, i
     }
 }
 
-__device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, curandState* rand_state, int i, int poisson_timestep, float3 sim_size, CSData* d_cross_sections){
+__device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, int i, int poisson_timestep, float3 sim_size, CSData* d_cross_sections){
     Electron electron = d_electrons[i];
     Electron new_electron;
     int start_t = max(1, electron.timestamp + 1);
     
     for(int t = start_t; t <= poisson_timestep; t++){
-        if (updateParticle(&electron, &new_electron, deltaTime, rand_state, i, t, sim_size, d_cross_sections)){
+        if (updateParticle(&electron, &new_electron, deltaTime, i, t, sim_size, d_cross_sections)){
             if (*n < capacity){
                 int new_i = atomicAdd(n, 1);
                 if (new_i < capacity){
@@ -230,15 +226,15 @@ __device__ static void simulateMany(Electron* d_electrons, float deltaTime, int*
     d_electrons[i] = electron;
 }
 
-__global__ static void cpuSync(Electron* d_electrons, float deltaTime, int* n, int start_n, int offset, int capacity, curandState* d_rand_states, int poisson_timestep, float3 sim_size, CSData* d_cross_sections) {
+__global__ static void cpuSync(Electron* d_electrons, float deltaTime, int* n, int start_n, int offset, int capacity, int poisson_timestep, float3 sim_size, CSData* d_cross_sections) {
     int i = blockIdx.x * blockDim.x + threadIdx.x + offset;
 
     // The thread index has passed the number of d_electrons. Thread returns if all electron are being handled
     if (i >= start_n) return;
-    simulateMany(d_electrons, deltaTime, n, capacity, &d_rand_states[i], i, poisson_timestep, sim_size, d_cross_sections);
+    simulateMany(d_electrons, deltaTime, n, capacity, i, poisson_timestep, sim_size, d_cross_sections);
 }
 
-__global__ static void naive(Electron* d_electrons, float deltaTime, int* n, int start_n, int capacity, curandState* d_rand_states, int t, float3 sim_size, CSData* d_cross_sections) {
+__global__ static void naive(Electron* d_electrons, float deltaTime, int* n, int start_n, int capacity, int t, float3 sim_size, CSData* d_cross_sections) {
 
     extern __shared__ Electron  new_particles_block[];
 
@@ -254,7 +250,7 @@ __global__ static void naive(Electron* d_electrons, float deltaTime, int* n, int
     Electron electron = d_electrons[i];
     if (electron.timestamp != DEAD){
         Electron new_electron;
-        if (updateParticle(&electron, &new_electron, deltaTime, &d_rand_states[i], i, t, sim_size, d_cross_sections)){
+        if (updateParticle(&electron, &new_electron, deltaTime, i, t, sim_size, d_cross_sections)){
             int new_i = atomicAdd(&n_block, 1);
             new_electron.timestamp = 0;
             new_particles_block[new_i] = new_electron;
@@ -277,7 +273,7 @@ __global__ static void naive(Electron* d_electrons, float deltaTime, int* n, int
     d_electrons[global_i] = new_particles_block[threadIdx.x];
 }
 
-__global__ static void dynamicOld(Electron* d_electrons, float deltaTime, int* n, int capacity, curandState* d_rand_states, int poisson_timestep, int sleep_time_ns, int* n_done, int* i_global, float3 sim_size, CSData* d_cross_sections) {
+__global__ static void dynamicOld(Electron* d_electrons, float deltaTime, int* n, int capacity, int poisson_timestep, int sleep_time_ns, int* n_done, int* i_global, float3 sim_size, CSData* d_cross_sections) {
     //int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
     while (true) {
         __syncthreads(); //sync threads seems to be able to handle threads being terminated
@@ -298,7 +294,7 @@ __global__ static void dynamicOld(Electron* d_electrons, float deltaTime, int* n
             __nanosleep(sleep_time_ns);
         }
 
-        simulateMany(d_electrons, deltaTime, n, capacity, &d_rand_states[i], i, poisson_timestep, sim_size, d_cross_sections);
+        simulateMany(d_electrons, deltaTime, n, capacity, i, poisson_timestep, sim_size, d_cross_sections);
         atomicAdd(n_done,1);
 
     }
@@ -376,25 +372,13 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     }
     printf("Multiprocessor count: %d\nBlocks per multiprocessor: %d\n", num_blocks_pers, blocks_per_sm);
     num_blocks_pers *= blocks_per_sm; 
-
-    int num_blocks_rand;
-    num_blocks_rand = (capacity + block_size - 1) / block_size;
-    // Use the line above instead for more determinism.
-    //if (mode == 0) num_blocks_rand = num_blocks_pers;
-    //else num_blocks_rand = (capacity + block_size - 1) / block_size;  // If not using persistent kernel, we don't know how many threads there will be. It can be up to cap.
-
-    curandState* d_rand_states;
-    cudaMalloc(&d_rand_states, num_blocks_rand * block_size * sizeof(curandState));
-    checkCudaError("Alloc rand");
-    setup_rand<<<num_blocks_rand, block_size>>>(d_rand_states);  // This has to be done before setup_particles
-    checkCudaError("Setup rand");
     
     Electron* h_electrons = (Electron *)calloc(capacity, sizeof(Electron));
     Electron* d_electrons;
     cudaMalloc(&d_electrons, 2 * capacity * sizeof(Electron));
     cudaMemset(d_electrons, 0, 2 * capacity * sizeof(Electron));
     checkCudaError("Electron alloc");
-    setup_particles<<<(init_n + block_size - 1) / block_size, block_size>>>(d_electrons, d_rand_states, init_n, Sim_Size, Grid_Size);
+    setup_particles<<<(init_n + block_size - 1) / block_size, block_size>>>(d_electrons, init_n, Sim_Size, Grid_Size);
 
     int* n_host = (int*)malloc(sizeof(int));
     int* n;
@@ -481,14 +465,14 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
         // Simulate
         switch(mode){
             case 0:{  // Dynamic
-                dynamic<<<num_blocks_pers, block_size, shared_mem_size_dynamic>>>(&d_electrons[source_index], mobility_timestep, n, capacity, d_rand_states, poisson_timestep, sleep_time_ns, n_created, n_done, i_global, Sim_Size, d_cross_sections);
+                dynamic<<<num_blocks_pers, block_size, shared_mem_size_dynamic>>>(&d_electrons[source_index], mobility_timestep, n, capacity, poisson_timestep, sleep_time_ns, n_created, n_done, i_global, Sim_Size, d_cross_sections);
                 break;
             }
             case 1:{  // CPU Sync
                 int last_n = 0;  // The amount of particles present in last run. All of these have been fully simulated.
                 while(min(*n_host, capacity) != last_n){  // Stop once nothing new has happened.
                     int num_blocks = (min(*n_host, capacity) - last_n + block_size - 1) / block_size;  // We do not need blocks for the old particles.
-                    cpuSync<<<num_blocks, block_size>>>(&d_electrons[source_index], mobility_timestep, n, min(*n_host, capacity), last_n, capacity, d_rand_states, poisson_timestep, Sim_Size, d_cross_sections);
+                    cpuSync<<<num_blocks, block_size>>>(&d_electrons[source_index], mobility_timestep, n, min(*n_host, capacity), last_n, capacity, poisson_timestep, Sim_Size, d_cross_sections);
                     last_n = min(*n_host, capacity);  // Update last_n to the amount just run. NOT to the amount after this run (we don't know that amount yet).
                     cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Now update to the current amount of particles.
                 }
@@ -497,14 +481,14 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
             case 2:{  // Naive
                 for (int mob_t = 1; mob_t <= poisson_timestep; mob_t++){
                     int num_blocks = (min(*n_host, capacity) + block_size - 1) / block_size;
-                    naive<<<num_blocks, block_size, shared_mem_size_naive>>>(&d_electrons[source_index], mobility_timestep, n, min(*n_host, capacity), capacity, d_rand_states, mob_t, Sim_Size, d_cross_sections);
+                    naive<<<num_blocks, block_size, shared_mem_size_naive>>>(&d_electrons[source_index], mobility_timestep, n, min(*n_host, capacity), capacity, mob_t, Sim_Size, d_cross_sections);
                     log(verbose, t, h_electrons, d_electrons, n_host, n, capacity);
                     cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
                 }
                 break;
             }
             case 3:{  // Dynamic Old
-                dynamicOld<<<num_blocks_pers, block_size>>>(&d_electrons[source_index], mobility_timestep, n, capacity, d_rand_states, poisson_timestep, sleep_time_ns, n_done, i_global, Sim_Size, d_cross_sections);
+                dynamicOld<<<num_blocks_pers, block_size>>>(&d_electrons[source_index], mobility_timestep, n, capacity, poisson_timestep, sleep_time_ns, n_done, i_global, Sim_Size, d_cross_sections);
                 break;
             }
         }
@@ -537,7 +521,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     checkCudaError("After sim");
 
     cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
-    cudaMemcpy(h_electrons, d_electrons, min(*n_host, capacity) * sizeof(Electron), cudaMemcpyDeviceToHost);   
+    cudaMemcpy(h_electrons, &d_electrons[destination_index], min(*n_host, capacity) * sizeof(Electron), cudaMemcpyDeviceToHost);   
 
     cudaEventSynchronize(stop);
     float runtime_ms = 0;
@@ -564,7 +548,6 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     cudaFree(n_created);
     cudaFree(n_done);
     cudaFree(i_global);
-    cudaFree(d_rand_states);
     cudaFree(d_grid.ptr);
 
     return run_data;

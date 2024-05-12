@@ -15,7 +15,6 @@ __global__ void setup_particles(Electron* d_electrons, curandState* d_rand_state
     //                                       randFloat(&d_rand_states[i], 0, (grid_size.y) * cell_size), 
     //                                       randFloat(&d_rand_states[i], 0, (grid_size.z) * cell_size));
     // printf("x %d, y %d, z %d \n", (int)(d_electrons[i].position.x/cell_size), (int)(d_electrons[i].position.y/cell_size), (int)(d_electrons[i].position.z/cell_size));
-    d_electrons[i].weight = 1.0;
     d_electrons[i].timestamp = -1;
 }
 
@@ -68,7 +67,6 @@ __device__ bool collider(Electron* electron, Electron* new_electron, float delta
     if (rand < split_chance) {
         spawned_new = true;
         *new_electron = *electron;
-        new_electron->creator = i;
         new_electron->timestamp = t;
 
         electron->velocity.x = -electron->velocity.x;

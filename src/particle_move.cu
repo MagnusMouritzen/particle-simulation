@@ -62,8 +62,6 @@ __device__ bool collider(Electron* electron, Electron* new_electron, curandState
                              (electron->velocity.y * electron->velocity.y) +
                              (electron->velocity.z * electron->velocity.z);
     int electron_energy_index = energyToIndex(electron_energy);
-
-    // printf("x %d, y %d, z %d, energy : %e, index %d \n", (int)(electron->position.x/cell_size), (int)(electron->position.y/cell_size), (int)(electron->position.z/cell_size), electron_energy, electron_energy_index);
     
     float split_chance = d_cross_sections[electron_energy_index].split_chance;
     float remove_chance = d_cross_sections[electron_energy_index].remove_chance;

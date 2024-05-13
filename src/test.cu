@@ -5,13 +5,15 @@ void runBenchmark(){
     vector<TimingData> data;
     int init_ns[] = {1000000};
     int block_sizes[] = {128,256,512,1024};
-    int mobility_stepss[] = {1000};
+    //int mobility_stepss[] = {1000};
     int max_ns[] = {100000000};
     int functions[] = {0,1,2,3};
     int sleep_times[] = {100};
-    int poisson_stepss[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    int poisson_stepss[] = {10};
 
-    for (int mobility_steps : mobility_stepss){
+    int incr = 10;
+    for (int mobility_steps = incr; mobility_steps <= 1000; mobility_steps += incr){
+        if (mobility_steps == incr * 10) incr *= 10;
         for(int init_n : init_ns) {
             for(int block_size : block_sizes){
                 for(int poisson_steps : poisson_stepss){
@@ -35,7 +37,7 @@ void runBenchmark(){
             }
         }
     }
-    printCSV(data, "out/data/poisson_timesteps.csv");
+    printCSV(data, "out/data/mobility_timesteps.csv");
 }
 
 void runUnitTest(int init_n, int max_n, int max_t, int poisson_timestep, int verbose, int block_size, int sleep_time){

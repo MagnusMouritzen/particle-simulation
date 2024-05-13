@@ -2,8 +2,6 @@
 
 #include <tuple>
 #include <stdio.h>
-#include <curand.h>
-#include <curand_kernel.h>
 
 using namespace std;
 
@@ -13,14 +11,13 @@ using namespace std;
 
 struct Electron {
     public:
-        float3 position;
+        double3 position;
+        double3 velocity;
+        double3 acceleration;
         int timestamp;
-        float3 velocity;
-        float3 acceleration;
-        curandState rand_state;
 
         __host__ void print(){
-            printf("(%.6f, %.6f, %.6f) (%.6f, %.6f, %.6f) ((%.6f, %.6f, %.6f)) [%d]\n", position.x, position.y, position.z, velocity.x, velocity.y, velocity.z, acceleration.x, acceleration.y, acceleration.z, timestamp);
+            printf("(%.15f, %.15f, %.15f) (%.15f, %.15f, %.15f) ((%.15f, %.15f, %.15f)) [%d]\n", position.x, position.y, position.z, velocity.x, velocity.y, velocity.z, acceleration.x, acceleration.y, acceleration.z, timestamp);
         }
 
         __host__ void print(int i){
@@ -28,7 +25,7 @@ struct Electron {
             print();
         }
 
-        __host__ tuple<int, float, float, float, float, float, float> getKey() const {
+        __host__ tuple<int, double, double, double, double, double, double> getKey() const {
             return make_tuple(timestamp, position.y, position.x, position.z, velocity.y, velocity.x, velocity.z);
         }
 

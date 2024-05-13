@@ -23,7 +23,7 @@ void runBenchmark(){
                         for(int sleep_time : sleep_times){
                             for (int init_n : init_ns){
                                 for(int function : functions){
-                                    if (block_size > 512 && function == 2) continue;  // Naive can't handle bigger blocks.
+                                    if (block_size > 256 && function == 2) continue;  // Naive can't handle bigger blocks.
                                     RunData run_data = runPIC(init_n, max_n, max_t, poisson_timestep, function, 0, block_size, sleep_time, collision_chance);
                                     if (run_data.final_n >= max_n) {
                                         //throw runtime_error("Illegal configuration, capacity reached!");

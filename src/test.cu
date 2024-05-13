@@ -46,8 +46,8 @@ void runBenchmark(){
 void runUnitTest(int init_n, int max_n, int max_t, int poisson_timestep, int verbose, int block_size, int sleep_time, float collision_chance){
     // How I ran it:
     // run test 0 1 200 256 10000000 100
-    int base_function = 0;
-    int test_functions[] = {1, 2, 3};
+    int base_function = 1;
+    int test_functions[] = {0, 1, 3};
     
     int amnt = sizeof(test_functions) / sizeof(int);
     bool broken[amnt];

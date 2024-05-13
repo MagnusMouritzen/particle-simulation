@@ -50,7 +50,7 @@ __global__ void updateGrid(cudaPitchedPtr d_grid, double electric_force_constant
     if (z != grid_size.z-1) zAcc += ((Cell*)(row+slicePitch))[x].charge;
     zAcc *= electric_force_constant;
 
-    ((Cell*)row)[x].acceleration = make_float3((float)xAcc, (float)yAcc, (float)zAcc);
+    ((Cell*)row)[x].acceleration = make_double3(xAcc, yAcc, zAcc);
 }
 
 __global__ void gridToParticles(cudaPitchedPtr d_grid, Electron* d_electrons, int* n, int3 grid_size) {

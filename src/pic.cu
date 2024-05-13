@@ -29,12 +29,14 @@ __device__ void aquireLock(int* lock){
         }
     }
     __syncwarp();
+    __threadfence_block();
 }
 
 __device__ void releaseLock(int* lock){
     if (LANE == 0){
         atomicExch(lock, 0);
     }
+    __threadfence_block();
 }
 
 __device__ void uploadElectron(Electron* electron_dest, curandState* rand_state_dest, Electron new_electron, curandState new_rand_state, int test_i){
@@ -331,6 +333,8 @@ __global__ static void remove_dead_particles(Electron* d_electrons_old, Electron
 
     if (threadIdx.x == 0) n_block = 0;
     __syncthreads();
+
+    d_electrons_old[i].timestamp = 0;
 
     int i_local = 0;
     int count = __popc(alive_mask);

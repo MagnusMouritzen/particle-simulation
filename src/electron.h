@@ -17,7 +17,7 @@ struct Electron {
         int timestamp;
 
         __host__ void print(){
-            printf("(%.6f, %.6f, %.6f) (%.6f, %.6f, %.6f) ((%.6f, %.6f, %.6f)) [%d]\n", position.x, position.y, position.z, velocity.x, velocity.y, velocity.z, acceleration.x, acceleration.y, acceleration.z, timestamp);
+            printf("(%.15f, %.15f, %.15f) (%.15f, %.15f, %.15f) ((%.15f, %.15f, %.15f)) [%d]\n", position.x, position.y, position.z, velocity.x, velocity.y, velocity.z, acceleration.x, acceleration.y, acceleration.z, timestamp);
         }
 
         __host__ void print(int i){

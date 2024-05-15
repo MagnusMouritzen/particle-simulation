@@ -6,22 +6,21 @@ using namespace std;
 
 void runBenchmark(){
     vector<TimingData> data;
-    //int init_ns[] = {10000};
-    int block_sizes[] = {128,256,512,1024};
-    int max_ts[] = {1900};
+    int init_ns[] = {1000};
+    int block_sizes[] = {512};
+    // int max_ts[] = {5000};
     int max_ns[] = {100000000};
     int functions[] = {0,1,2,3,4,5,6,7,8,9,10,11,12};
     int sleep_times[] = {100};
 
     int incr = 100;
-    for(int init_n = incr; init_n <= 200000; init_n += incr){
-        if (init_n == incr * 10) incr *= 10;
+    for(int max_t = incr; max_t <= 20000; max_t += incr){
         for(int block_size : block_sizes){
-            for(int max_t : max_ts){
+            for(int init_n : init_ns){
                 for(int max_n : max_ns){
                     for(int sleep_time : sleep_times){
                         for(int function : functions){
-                            RunData run_data = multiplyRun(init_n, max_n, max_t, function, 0, block_size, sleep_time, 0.001);
+                            RunData run_data = multiplyRun(init_n, max_n, max_t, function, 0, block_size, sleep_time, 0.01);
                             data.push_back(run_data.timing_data);
                             free(run_data.electrons);
                         }
@@ -30,7 +29,7 @@ void runBenchmark(){
             }
         }
     }
-    printCSV(data, "out/data/schedulers_init_n.csv");
+    printCSV(data, "out/data/max_t_opt.csv");
 }
 
 void runUnitTest(int init_n, int max_n, int max_t, int verbose, int block_size, int sleep_time, float split_chance){

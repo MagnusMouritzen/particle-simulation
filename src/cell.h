@@ -13,6 +13,6 @@ extern double Electric_Force_Constant;
 
 struct Cell {
     public:
-        double charge;
-        double3 acceleration;
+        int charge;
+        float3 acceleration;
 };

@@ -18,7 +18,7 @@
 # Total walltime of the program, How much time do we expect it to run.
 # When this time has passed the program WILL be killed if it is not
 # comlete.
-#BSUB -W 04:00
+#BSUB -W 01:00
 # How much memory do we want to allocate per core allocated.
 # In this case we will have 4x16GB as we have 4 cores
 #BSUB -R "rusage[mem=16GB]"

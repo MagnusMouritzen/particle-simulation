@@ -6,7 +6,7 @@ void runBenchmark(){
     //int init_ns[] = {1000000};
     int block_sizes[] = {128,256,512,1024};
     int mobility_stepss[] = {1000};
-    int max_ns[] = {100000000};
+    int max_ns[] = {50000000};
     int functions[] = {0,1,2,3};
     int sleep_times[] = {100};
     int poisson_stepss[] = {10};

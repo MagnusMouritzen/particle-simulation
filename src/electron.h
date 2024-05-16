@@ -13,11 +13,11 @@ struct Electron {
     public:
         double3 position;
         double3 velocity;
-        double3 acceleration;
+        float3 acceleration;
         int timestamp;
 
         __host__ void print(){
-            printf("(%.15f, %.15f, %.15f) (%.15f, %.15f, %.15f) ((%.15f, %.15f, %.15f)) [%d]\n", position.x, position.y, position.z, velocity.x, velocity.y, velocity.z, acceleration.x, acceleration.y, acceleration.z, timestamp);
+            printf("(%.15f, %.15f, %.15f) (%.15f, %.15f, %.15f) ((%.7f, %.7f, %.7f)) [%d]\n", position.x, position.y, position.z, velocity.x, velocity.y, velocity.z, acceleration.x, acceleration.y, acceleration.z, timestamp);
         }
 
         __host__ void print(int i){

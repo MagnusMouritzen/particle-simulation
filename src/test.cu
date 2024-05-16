@@ -2,6 +2,7 @@
 #include <stdexcept>
 #include "mvp.h"
 #include "test.h"
+#include "mvp.h"
 using namespace std;
 
 void runBenchmark(){
@@ -14,12 +15,12 @@ void runBenchmark(){
     int functions[] = {0,1,2,3};
     int sleep_times[] = {100};
     // float split_chances[] = {0, 0.05, 0.5, 5, 50};
-    float split_chances[] = {0.05};
+    float split_chances[] = {0.02};
 
     int incr = 100;
-    for(int max_t = incr; max_t <= 10000; max_t += incr){
-    if (max_t == incr * 10) incr *= 10;
-        for(int init_n : init_ns){
+    for(int init_n = incr; init_n <= 1000000; init_n += incr){
+    if (init_n == incr * 10) incr *= 10;
+        for(int max_t : max_ts){
             for(int block_size : block_sizes){
                 for(int max_n : max_ns){
                     for(int sleep_time : sleep_times){
@@ -29,7 +30,7 @@ void runBenchmark(){
                                     printf("Skip %d %d %.6f %d\n", init_n, max_t, split_chance, max_n);
                                     continue;
                                 }
-                                RunData run_data = runMVP(init_n, max_n, max_t, function, 0, block_size, sleep_time, 0.01, split_chance, true);
+                                RunData run_data = runMVP(init_n, max_n, max_t, function, 0, block_size, sleep_time, 0.01, split_chance, false);
                                 if (run_data.final_n >= max_n) {
                                     //throw runtime_error("Illegal configuration, capacity reached!");
                                     printf("\n\n\nIllegal!!!\n\n\n");
@@ -44,7 +45,7 @@ void runBenchmark(){
             }
         }
     }
-    printCSV(data, "out/data.csv");
+    printCSV(data, "out/data/max_t_opt.csv");
 }
 
 void runUnitTest(int init_n, int max_n, int max_t, int verbose, int block_size, int sleep_time, float split_chance, bool simulate_new_particles){

@@ -10,7 +10,6 @@
 // __device__ curandState *d_rand_state;
 
 __shared__ int i_block;
-__shared__ int capacity;
 
 __shared__ int n_block;
 __shared__ int new_i_block;
@@ -287,6 +286,7 @@ RunData runMVP (int init_n, int capacity, int max_t, int mode, int verbose, int 
     cudaMalloc(&i_global, sizeof(int));
     cudaMemset(i_global, 0, sizeof(int));
 
+
     switch(mode){
         case 0: { //Naive      
             timing_data.function = "Naive";
@@ -321,9 +321,11 @@ RunData runMVP (int init_n, int capacity, int max_t, int mode, int verbose, int 
         case 2: { //Static
             timing_data.function = "Static";
             int num_blocks;
+            int numBlocksPerSm;
+            cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksPerSm, staticGpu, block_size, 0);
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
             cudaEventRecord(start);
-            staticGpu<<<num_blocks, block_size>>>(d_electrons, delta_time, n, inc_n, capacity, split_chance, d_rand_states, max_t, sleep_time_ns, n_done);
+            staticGpu<<<num_blocks*numBlocksPerSm, block_size>>>(d_electrons, delta_time, n, inc_n, capacity, split_chance, d_rand_states, max_t, sleep_time_ns, n_done);
             cudaEventRecord(stop);
             
             break;
@@ -331,9 +333,11 @@ RunData runMVP (int init_n, int capacity, int max_t, int mode, int verbose, int 
         case 3: { //Dynamic
             timing_data.function = "Dynamic";
             int num_blocks;
+            int numBlocksPerSm;
+            cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksPerSm, dynamicGpu, block_size, 4);
             cudaDeviceGetAttribute(&num_blocks, cudaDevAttrMultiProcessorCount, 0);
             cudaEventRecord(start);
-            dynamicGpu<<<num_blocks, block_size>>>(d_electrons, delta_time, n, inc_n, capacity, split_chance, d_rand_states, max_t, sleep_time_ns, n_done, i_global);
+            dynamicGpu<<<num_blocks*numBlocksPerSm, block_size>>>(d_electrons, delta_time, n, inc_n, capacity, split_chance, d_rand_states, max_t, sleep_time_ns, n_done, i_global);
             cudaEventRecord(stop);
             break;
         }

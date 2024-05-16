@@ -1,4 +1,4 @@
-./out/main $1 $2 $3 $4 $5 $6 $7 $8
+./out/main $1 $2 $3 $4 $5 $6 $7 $8 $9 ${10}
 # 1 Mode
 # 2 Verbose
 # 3 init n
@@ -7,3 +7,5 @@
 # 6 max n
 # 7 sleep time
 # 8 split chance
+# 9 remove chance
+# 10 poisson_timestep

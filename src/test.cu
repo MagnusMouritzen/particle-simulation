@@ -3,18 +3,18 @@ using namespace std;
 
 void runBenchmark(){
     vector<TimingData> data;
-    int init_ns[] = {1000000};
+    //int init_ns[] = {1000000};
     int block_sizes[] = {128,256,512,1024};
-    //int mobility_stepss[] = {1000};
+    int mobility_stepss[] = {1000};
     int max_ns[] = {100000000};
     int functions[] = {0,1,2,3};
     int sleep_times[] = {100};
     int poisson_stepss[] = {10};
 
-    int incr = 10;
-    for (int mobility_steps = incr; mobility_steps <= 1000; mobility_steps += incr){
-        if (mobility_steps == incr * 10) incr *= 10;
-        for(int init_n : init_ns) {
+    int incr = 10000;
+    for (int init_n = incr; init_n <= 1000000; init_n += incr){
+        if (init_n == incr * 10) incr *= 10;
+        for(int mobility_steps : mobility_stepss) {
             for(int block_size : block_sizes){
                 for(int poisson_steps : poisson_stepss){
                     for(int max_n : max_ns){
@@ -37,7 +37,7 @@ void runBenchmark(){
             }
         }
     }
-    printCSV(data, "out/data/mobility_timesteps.csv");
+    printCSV(data, "out/data/pic_init_n.csv");
 }
 
 void runUnitTest(int init_n, int max_n, int max_t, int poisson_timestep, int verbose, int block_size, int sleep_time){

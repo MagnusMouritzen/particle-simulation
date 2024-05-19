@@ -367,6 +367,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     TimingData timing_data;
     timing_data.init_n = init_n;
     timing_data.iterations = poisson_steps;
+    timing_data.mobility_steps = poisson_timestep;
     timing_data.block_size = block_size;
     timing_data.sleep_time = sleep_time_ns;
 

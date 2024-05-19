@@ -85,11 +85,11 @@ double end_cpu_timer(chrono::time_point<high_resolution_clock> start){
 }
 
 void printTimingHeader(FILE* os){
-    fprintf(os, "func,init n,iterations,block size,sleep time,split chance,final n,time\n");
+    fprintf(os, "func,init n,iterations,mobility steps,block size,sleep time,split chance,final n,time\n");
 }
 
 void printTimingData(const TimingData& data, FILE* os){
-    fprintf(os, "%s,%d,%d,%d,%d,%f,%d,%f\n", data.function.c_str(), data.init_n, data.iterations, data.block_size, data.sleep_time, data.split_chance, data.final_n, data.time);
+    fprintf(os, "%s,%d,%d,%d,%d,%d,%f,%d,%f\n", data.function.c_str(), data.init_n, data.iterations, data.mobility_steps, data.block_size, data.sleep_time, data.split_chance, data.final_n, data.time);
 }
 
 void printCSV(const vector<TimingData>& data, FILE* os){

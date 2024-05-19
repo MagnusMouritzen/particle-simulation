@@ -27,4 +27,4 @@ plt.xticks([128, 256, 512, 1024])
 plt.legend(title='Function')
 
 # Save the plot as pic_cc_short.png
-plt.savefig("out/visualization/" + filename + "_block.png")
+plt.savefig("out/visualization/pic_block.png")

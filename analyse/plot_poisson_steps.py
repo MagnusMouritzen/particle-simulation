@@ -26,6 +26,8 @@ plt.title("Poisson steps vs. Time Across Functions and Block Sizes")
 plt.xlabel("Poisson steps")
 plt.ylabel("Time (ms)")
 plt.grid(True)
+plt.minorticks_on()
+plt.grid(which='minor', linestyle=':', linewidth=0.5)
 plt.legend(title='Function & Block Size')
 
 # Save the plot as pic_cc_short.png

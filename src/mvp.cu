@@ -111,7 +111,6 @@ __device__ static void simulateNaive(Electron* d_electrons, Electron* new_electr
 __device__ static void simulateMany(Electron* d_electrons, float deltaTime, int* n, int capacity, float split_chance, curandState* d_rand_states, int i, int start_t, int max_t, bool set_timestamp){
     Electron electron = d_electrons[i];
     curandState rand_state = d_rand_states[i];
-
     for(int t = start_t; t <= max_t; t++){
         int new_i = updateParticle(&electron, d_electrons, deltaTime, n, capacity, split_chance, &rand_state, i, t);
         if(new_i != -1 && new_i < capacity) {
@@ -136,9 +135,7 @@ __global__ static void naive(Electron* d_electrons, float deltaTime, int* n, int
     
     // The thread index has passed the number of d_electrons. Thread returns if all electron are being handled
     if (i >= start_n) return;
-
     simulateNaive(d_electrons, new_particles_block, deltaTime, &n_block, capacity, split_chance, d_rand_states, i, t);
-
 
     __syncthreads();
 
@@ -155,6 +152,23 @@ __global__ static void naive(Electron* d_electrons, float deltaTime, int* n, int
     newRandState(d_rand_states, global_i, randInt(&d_rand_states[new_particles_block[threadIdx.x].creator], 0, 10000));
     d_electrons[global_i] = new_particles_block[threadIdx.x];
     d_electrons[global_i].timestamp = t;
+
+    // int i = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    // // The thread index has passed the number of electrons. Thread returns if all electron are being handled
+    // if (i >= start_n) return;
+    // Electron electron = d_electrons[i];
+    // curandState rand_state = d_rand_states[i];
+    // int new_i = updateParticle(&electron, d_electrons, deltaTime, n, capacity, split_chance, &rand_state, i, t);
+    // if(new_i != -1 && new_i < capacity) {
+    //     newRandState(d_rand_states, new_i, randInt(&rand_state, 0, 10000));
+    //     __threadfence();
+    //     if (true) d_electrons[new_i].timestamp = t;
+    //     else d_electrons[new_i].timestamp = 0;
+    // }
+    // d_electrons[i] = electron;
+    // d_rand_states[i] = rand_state;
+
 }
 
 __global__ static void cpuSynch(Electron* d_electrons, float deltaTime, int* n, int start_n, int offset, int capacity, float split_chance, curandState* d_rand_states, int max_t) {
@@ -184,7 +198,7 @@ __global__ static void staticGpu(Electron* d_electrons, float deltaTime, int* n,
             if (cur_n==cur_n_done) return;
             __nanosleep(sleep_time_ns);
         }
-
+        
         simulateMany(d_electrons, deltaTime, inc_n, capacity, split_chance, d_rand_states, i, max(1, d_electrons[i].timestamp + 1), max_t, n == inc_n);
         n_done_local++;
     }
@@ -297,11 +311,22 @@ RunData runMVP (int init_n, int capacity, int max_t, int mode, int verbose, int 
                 if (simulate_new_particles) start_n = min(*n_host, capacity);
                 else start_n = init_n;
                 int num_blocks = (start_n + block_size - 1) / block_size;
+                // naive<<<num_blocks, block_size, shared_mem_size>>>(d_electrons, delta_time, inc_n, start_n, capacity, split_chance, d_rand_states, t);
                 naive<<<num_blocks, block_size, shared_mem_size>>>(d_electrons, delta_time, inc_n, start_n, capacity, split_chance, d_rand_states, t);
                 log(verbose, t, h_electrons, d_electrons, n_host, inc_n, capacity);
                 cudaMemcpy(n_host, inc_n, sizeof(int), cudaMemcpyDeviceToHost);
             }
             cudaEventRecord(stop);
+
+
+            // cudaEventRecord(start);
+            // for (int t = 1; t <= max_t; t++){
+            //     int num_blocks = (min(*n_host, capacity) + block_size - 1) / block_size;
+            //     naive<<<num_blocks, block_size>>>(d_electrons, delta_time, n, min(*n_host, capacity), capacity, split_chance, d_rand_states, t);
+            //     cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
+
+            // }
+            // cudaEventRecord(stop);
             break;
         }
         case 1: { //CPU Sync

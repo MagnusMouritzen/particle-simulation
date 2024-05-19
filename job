@@ -6,7 +6,7 @@
 # queues for A100, such as gpua100.
 #BSUB -q gpuv100
 # The name of the job. Will e.g. be shown using the `bstat` command.
-#BSUB -J mvp_n_no
+#BSUB -J mvp_t_no
 # The number of cores that we want to allocate, this is equavalent
 # to the total number of cores for the whole job, so if we wish to
 # run 32 threads on 4 nodes, this number need to be 128.
@@ -27,9 +27,9 @@
 #BSUB -R "span[hosts=1]"
 
 # stdout and stderr files
-#BSUB -o "out/jobs/mvp_init_n_no_sim_%J.out"
-#BSUB -e "out/jobs/mvp_init_n_no_sim_%J.err"
+#BSUB -o "out/jobs/mvp_max_t_no_sim_%J.out"
+#BSUB -e "out/jobs/mvp_max_t_no_sim_%J.err"
 
 mkdir -p out/jobs
 
-./out/mvp_init_n_no_sim bench > out/jobs/mvp_init_n_no_sim_${LSB_JOBID}.log
+./out/mvp_max_t_no_sim bench > out/jobs/mvp_max_t_no_sim_${LSB_JOBID}.log

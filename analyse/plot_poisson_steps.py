@@ -11,6 +11,7 @@ filter_criteria = ((df["func"] == "Naive") & (df["block size"] == 256)) | \
                   ((df["func"] == "CPU Sync") & (df["block size"] == 1024)) | \
                   ((df["func"] == "Dynamic Old") & (df["block size"] == 1024))
 df = df[filter_criteria]
+#df = df[df['func'] == "Dynamic"]
 
 plt.figure(figsize=(12, 8))
 palette = {
@@ -29,6 +30,7 @@ plt.grid(True)
 plt.minorticks_on()
 plt.grid(which='minor', linestyle=':', linewidth=0.5)
 plt.legend(title='Function & Block Size')
+plt.tight_layout()
 
 # Save the plot as pic_cc_short.png
 plt.savefig("out/visualization/" + filename + ".png")

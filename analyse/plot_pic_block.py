@@ -25,6 +25,7 @@ plt.ylabel("Time (ms)")
 plt.grid(True)
 plt.xticks([128, 256, 512, 1024])
 plt.legend(title='Function')
+plt.tight_layout()
 
 # Save the plot as pic_cc_short.png
 plt.savefig("out/visualization/pic_block.png")

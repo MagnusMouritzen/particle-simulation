@@ -361,6 +361,47 @@ __global__ static void remove_dead_particles(Electron* d_electrons_old, Electron
     d_electrons_new[i_block + i_local].timestamp = -1;
 }
 
+__global__ static void remove_dead_particles_simp(Electron* d_electrons_old, Electron* d_electrons_new, curandState* d_rand_states_old, curandState* d_rand_states_new, int* n, int start_n){
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= start_n) return;
+    bool alive = d_electrons_old[i].timestamp != DEAD;
+
+    d_electrons_old[i].timestamp = 0;
+
+    if (!alive) return;
+
+    int i_new = atomicAdd(n, 1);
+    d_rand_states_new[i_new] = d_rand_states_old[i];
+    d_electrons_new[i_new] = d_electrons_old[i];
+    d_electrons_new[i_new].timestamp = -1;
+}
+
+__global__ static void remove_dead_particles_block(Electron* d_electrons_old, Electron* d_electrons_new, curandState* d_rand_states_old, curandState* d_rand_states_new, int* n, int start_n){
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    bool alive = (i < start_n) && (d_electrons_old[i].timestamp != DEAD);
+
+    if (i >= start_n) return;
+
+    if (threadIdx.x == 0) n_block = 0;
+    __syncthreads();
+
+    d_electrons_old[i].timestamp = 0;
+
+    int i_local;
+    if (alive) i_local = atomicAdd(&n_block, 1);
+
+    __syncthreads();
+    if (threadIdx.x == 0){
+        i_block = atomicAdd(n, n_block);
+    }
+    __syncthreads();
+
+    if (!alive) return;
+    d_rand_states_new[i_block + i_local] = d_rand_states_old[i];
+    d_electrons_new[i_block + i_local] = d_electrons_old[i];
+    d_electrons_new[i_block + i_local].timestamp = -1;
+}
+
 RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timestep, int mode, int verbose, int block_size, int sleep_time_ns) {
     printf("PIC with\ninit n: %d\ncapacity: %d\npoisson steps: %d\npoisson_timestep: %d\nblock size: %d\nsleep time: %d\n", init_n, capacity, poisson_steps, poisson_timestep, block_size, sleep_time_ns);
 
@@ -480,6 +521,8 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
         cudaMemset(i_global, 0, sizeof(int));
         cudaMemcpy(n_created, n_host, sizeof(int), cudaMemcpyHostToDevice);
 
+        /*
+
         // Grid operations
         resetGrid<<<dim_grid, dim_block>>>(d_grid, Grid_Size);
         // cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
@@ -493,10 +536,11 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
         gridToParticles<<<num_blocks_all, block_size>>>(d_grid, &d_electrons[source_index], n, Grid_Size);
         // cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
         // checkCudaError("Grid to particles");
-
+        */
         int old_n_host = *n_host;
-
+        /*
         // Simulate
+        
         switch(mode){
             case 0:{  // Dynamic
                 dynamic<<<num_blocks_pers, block_size, shared_mem_size_dynamic>>>(&d_electrons[source_index], mobility_timestep, n, capacity, &d_rand_states[source_index], poisson_timestep, sleep_time_ns, n_created, n_done, i_global, Sim_Size, d_cross_sections);
@@ -526,6 +570,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
                 break;
             }
         }
+        */
         cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
         total_added += *n_host - old_n_host;
         checkCudaError("Mobility steps");
@@ -536,7 +581,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
         // Remove dead particles
         cudaMemset(n, 0, sizeof(int));
         num_blocks_all = (min(*n_host, capacity) + block_size - 1) / block_size;
-        remove_dead_particles<<<num_blocks_all, block_size>>>(&d_electrons[source_index], &d_electrons[destination_index], &d_rand_states[source_index], &d_rand_states[destination_index], n, min(*n_host, capacity));
+        remove_dead_particles_block<<<num_blocks_all, block_size>>>(&d_electrons[source_index], &d_electrons[destination_index], &d_rand_states[source_index], &d_rand_states[destination_index], n, min(*n_host, capacity));
         old_n_host = *n_host;
         cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
         total_removed += old_n_host - *n_host;

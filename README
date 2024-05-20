@@ -26,7 +26,7 @@ The program `run` takes 8 arguments:
 8. poisson_timestep
 
 ```
-run [mode] [Verbose] [init n] [max t] [block size] [max n] [sleep time] [poisson_timestep]
+run [Mode] [Verbose] [init n] [max t] [block size] [max n] [sleep time] [poisson_timestep]
 ```
 
 
@@ -48,6 +48,9 @@ The program `run` takes 10 arguments of which the last two are currently not use
 7. sleep time
 8. split chance
 
+- Run various scheduler tests by picking a mode between 3-15. 
+
+- Run the MVP by picking modes 20-23
 ```
-run [mode] [Verbose] [init n] [max t] [block size] [max n] [sleep time] [split chance] 0 0
+run [Mode] [Verbose] [init n] [max t] [block size] [max n] [sleep time] [split chance] 0 0
 ```

@@ -1,4 +1,9 @@
-# TO RUN THE 
+# TO RUN THE PROGRAM
+The program has been developed to run on the HPC provided by DTU. The following modules are needed to run the code:
+
+```
+module load cuda/12.2.2 nvhpc/23.7-nompi gcc/12.3.0-binutils-2.40
+```
 ## PIC
 ### Compile
 ```

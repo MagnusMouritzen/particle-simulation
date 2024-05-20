@@ -1,0 +1,44 @@
+# TO RUN THE 
+## PIC
+### Compile
+```
+cd PIC
+make
+```
+### Run
+The program `run` takes 8 arguments:
+1. Mode
+2. Verbose
+3. init n
+4. max t
+5. block size
+6. max n
+7. sleep time
+8. poisson_timestep
+
+```
+run [mode] [Verbose] [init n] [max t] [block size] [max n] [sleep time] [poisson_timestep]
+```
+
+
+## MVP+SchedulerTests
+### Compile
+```
+cd MVP+SchedulerTests
+make
+```
+
+### Run
+The program `run` takes 10 arguments of which the last two are currently not used (set to 0):
+1. Mode
+2. Verbose
+3. init n
+4. max t
+5. block size
+6. max n
+7. sleep time
+8. split chance
+
+```
+run [mode] [Verbose] [init n] [max t] [block size] [max n] [sleep time] [split chance] 0 0
+```

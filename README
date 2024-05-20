@@ -1,7 +1,7 @@
 # GIT REPOSITORY
 The github repository can be found at: 
 
-<https://github.com/MagnusMouritzen/particle-simulation>
+<https://github.com/MagnusMouritzen/particle-simulation/tree/final_branch>
 # TO RUN THE PROGRAM
 The program has been developed to run on the HPC provided by DTU. The following modules are needed to run the code:
 

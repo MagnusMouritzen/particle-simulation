@@ -367,6 +367,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
     TimingData timing_data;
     timing_data.init_n = init_n;
     timing_data.iterations = poisson_steps;
+    timing_data.mobility_steps = poisson_timestep;
     timing_data.block_size = block_size;
     timing_data.sleep_time = sleep_time_ns;
     timing_data.split_chance = collision_chance;
@@ -501,7 +502,6 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
         // checkCudaError("Grid to particles");
 
         int old_n_host = *n_host;
-
         // Simulate
         switch(mode){
             case 0:{  // Dynamic
@@ -532,6 +532,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
                 break;
             }
         }
+
         cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
         total_added += *n_host - old_n_host;
         checkCudaError("Mobility steps");

@@ -16,6 +16,7 @@ struct TimingData{
     double time;
     int init_n;
     int iterations;
+    int mobility_steps;
     int block_size;
     int sleep_time;
     int final_n;

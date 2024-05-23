@@ -521,7 +521,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
         cudaMemset(i_global, 0, sizeof(int));
         cudaMemcpy(n_created, n_host, sizeof(int), cudaMemcpyHostToDevice);
 
-        /*
+        
 
         // Grid operations
         resetGrid<<<dim_grid, dim_block>>>(d_grid, Grid_Size);
@@ -536,9 +536,9 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
         gridToParticles<<<num_blocks_all, block_size>>>(d_grid, &d_electrons[source_index], n, Grid_Size);
         // cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);  // Just a sync for testing
         // checkCudaError("Grid to particles");
-        */
+        
         int old_n_host = *n_host;
-        /*
+        
         // Simulate
         
         switch(mode){
@@ -570,7 +570,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
                 break;
             }
         }
-        */
+        
         cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
         total_added += *n_host - old_n_host;
         checkCudaError("Mobility steps");
@@ -581,7 +581,7 @@ RunData runPIC (int init_n, int capacity, int poisson_steps, int poisson_timeste
         // Remove dead particles
         cudaMemset(n, 0, sizeof(int));
         num_blocks_all = (min(*n_host, capacity) + block_size - 1) / block_size;
-        remove_dead_particles_block<<<num_blocks_all, block_size>>>(&d_electrons[source_index], &d_electrons[destination_index], &d_rand_states[source_index], &d_rand_states[destination_index], n, min(*n_host, capacity));
+        remove_dead_particles<<<num_blocks_all, block_size>>>(&d_electrons[source_index], &d_electrons[destination_index], &d_rand_states[source_index], &d_rand_states[destination_index], n, min(*n_host, capacity));
         old_n_host = *n_host;
         cudaMemcpy(n_host, n, sizeof(int), cudaMemcpyDeviceToHost);
         total_removed += old_n_host - *n_host;

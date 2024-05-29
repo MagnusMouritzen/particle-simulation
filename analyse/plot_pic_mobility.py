@@ -2,7 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-filename = "mobility_timesteps"
+filename = "mobility_timesteps_nodet"
 
 # Read the CSV file into a DataFrame
 df = pd.read_csv("out/data/" + filename + ".csv")
@@ -10,9 +10,9 @@ filter_criteria = ((df["func"] == "Naive") & (df["block size"] == 256)) | \
                   ((df["func"] == "Dynamic") & (df["block size"] == 1024)) | \
                   ((df["func"] == "CPU Sync") & (df["block size"] == 1024)) | \
                   ((df["func"] == "Dynamic Old") & (df["block size"] == 1024))
-df = df[filter_criteria]
+#df = df[filter_criteria]
 #df = df[df['func'] == "Dynamic"]
-df = df[df['mobility steps'] <= 100]
+#df = df[df['mobility steps'] <= 100]
 
 plt.figure(figsize=(12, 8))
 palette = {
@@ -21,12 +21,12 @@ palette = {
     "Naive": "red",
     "Dynamic Old": "orange"
 }
-sns.lineplot(data=df, x="mobility steps", y="time", hue="func", markers=True, dashes=False, palette=palette)
-#plt.xscale('log')
-#plt.yscale('log')
+sns.lineplot(data=df, x="mobility steps", y="time", hue="func", style="block size", markers=True, dashes=False, palette=palette)
+plt.xscale('log')
+plt.yscale('log')
 plt.title("Mobility Timesteps vs. Time Across Functions")
-plt.xlabel("Mobility Timesteps")
-plt.ylabel("Time (ms)")
+plt.xlabel("Mobility Timesteps (log)")
+plt.ylabel("Time (ms) (log)")
 plt.grid(True)
 plt.minorticks_on()
 plt.grid(which='minor', linestyle=':', linewidth=0.5)
@@ -34,4 +34,4 @@ plt.legend(title='Function')
 plt.tight_layout()
 
 # Save the plot as pic_cc_short.png
-plt.savefig("out/visualization/" + filename + "_first.png")
+plt.savefig("out/visualization/" + filename + "_double_all.png")

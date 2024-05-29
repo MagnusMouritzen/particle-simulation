@@ -2,8 +2,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-#filename = "pic_cc_short"
-filename = "pic_cc_long"
+filename = "pic_cc_short_fix"
+#filename = "pic_cc_long_fix"
 
 # Read the CSV file into a DataFrame
 df = pd.read_csv("out/data/" + filename + ".csv")

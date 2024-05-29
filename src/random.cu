@@ -1,7 +1,7 @@
 #include "random.h" 
 
-__device__ void newRandState(curandState* rand_state, int seed){
-    curand_init(39587 + seed, 0, 0, rand_state);  // Keep base seed below 47483647
+__device__ void newRandState(curandState* rand_state, int sequence){
+    curand_init(39587, sequence, 0, rand_state);
 }
 
 __device__ float randFloat(curandState* state, float min, float max){

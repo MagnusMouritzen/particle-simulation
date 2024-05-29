@@ -27,9 +27,9 @@
 #BSUB -R "span[hosts=1]"
 
 # stdout and stderr files
-#BSUB -o "out/jobs/mobility_timesteps_%J.out"
-#BSUB -e "out/jobs/mobility_timesteps_%J.err"
+#BSUB -o "out/jobs/init_n_seq_%J.out"
+#BSUB -e "out/jobs/init_n_seq_%J.err"
 
 mkdir -p out/jobs
 
-./out/mobility_timesteps bench > out/jobs/mobility_timesteps_${LSB_JOBID}.log
+./out/init_n_seq bench > out/jobs/init_n_seq_${LSB_JOBID}.log

@@ -312,9 +312,9 @@ __global__ static void dynamicOld(Electron* d_electrons, double deltaTime, int* 
         if (i >= capacity) break;
 
         while (d_electrons[i].timestamp == 0 || i >= *n) {
-            int cur_n_done = *n_done;
+            int cur_n_done = atomicAdd(n_done, 0);
             __threadfence();
-            int cur_n = *n;
+            int cur_n = atomicAdd(n, 0);
             if (cur_n==cur_n_done) return;
             __nanosleep(sleep_time_ns);
         }

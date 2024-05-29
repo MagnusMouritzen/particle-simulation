@@ -17,3 +17,8 @@ __device__ int randInt(curandState* state, int min, int max){
     rand += min;
     return (int)truncf(rand);
 }
+
+__global__ void setup_rand(curandState* d_rand_states) {
+    int i = threadIdx.x+blockDim.x*blockIdx.x;
+    newRandState(&d_rand_states[i], i);
+}

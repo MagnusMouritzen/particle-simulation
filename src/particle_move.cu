@@ -3,6 +3,7 @@
 
 using namespace std;
 
+// Initial particle distribution.
 __global__ void setup_particles(Electron* d_electrons, curandState* d_rand_states, int init_n, float3 sim_size, int3 grid_size) {
     int i = threadIdx.x+blockDim.x*blockIdx.x;
     if (i >= init_n) return;
@@ -13,14 +14,11 @@ __global__ void setup_particles(Electron* d_electrons, curandState* d_rand_state
                                           randFloat(&d_rand_states[i], (grid_size.y / 2 - 30)*cell_size, (grid_size.y / 2 + 32)*cell_size), 
                                           randFloat(&d_rand_states[i], (grid_size.z / 2 - 30)*cell_size, (grid_size.z / 2 + 32)*cell_size));
 
-    // electron.position = make_float3(randFloat(&d_rand_states[i], 0, (grid_size.x) * cell_size), 
-    //                                       randFloat(&d_rand_states[i], 0, (grid_size.y) * cell_size), 
-    //                                       randFloat(&d_rand_states[i], 0, (grid_size.z) * cell_size));
-    // printf("x %d, y %d, z %d \n", (int)(electron.position.x/cell_size), (int)(electron.position.y/cell_size), (int)(electron.position.z/cell_size));
     electron.timestamp = -1;
     d_electrons[i] = electron;
 }
 
+// Moves particle using classical physics.
 __device__ void leapfrog(Electron* electron, double delta_time){
     double delta_time_half = delta_time / 2;
 
@@ -53,6 +51,7 @@ __device__ bool checkOutOfBounds(Electron* electron, float3 sim_size){
      return false;
 }
 
+// Determine and handle collision. True if a new particle was made.
 __device__ bool collider(Electron* electron, Electron* new_electron, double delta_time, curandState* rand_state, int i, int t, CSData* d_cross_sections){
     bool spawned_new = false;
     float rand = randFloat(rand_state, 0, 100);
@@ -80,6 +79,7 @@ __device__ bool collider(Electron* electron, Electron* new_electron, double delt
     return spawned_new;
 }
 
+// Simulate particle one step. True if a new particle was made.
 __device__ bool updateParticle(Electron* electron, Electron* new_electron, double delta_time, curandState* rand_state, int i, int t, float3 sim_size, CSData* d_cross_sections) {
     leapfrog(electron, delta_time);
     if (checkOutOfBounds(electron, sim_size)) return false;

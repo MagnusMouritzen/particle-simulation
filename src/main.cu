@@ -6,6 +6,7 @@
 
 
 int main(int argc, char **argv) {
+    // Runs benchmarks defiend in test.cu
     if (!strcmp(argv[1], "bench")){
         runBenchmark();
         return 0;
@@ -37,7 +38,7 @@ int main(int argc, char **argv) {
     else if (!strcmp(argv[1], "33")){
         runPIC(init_n, max_n, max_t, poisson_timestep, 3, verbose, block_size, sleep_time);
     }
-    // Test
+    // Runs test defined in test.cu
     else if (!strcmp(argv[1], "test")){
         runUnitTest(init_n, max_n, max_t, poisson_timestep, verbose, block_size, sleep_time);
     }

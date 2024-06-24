@@ -2,6 +2,7 @@
 
 #define getGridCell(x,y,z) (((Cell*)((((char*)d_grid.ptr) + z * (d_grid.pitch * grid_size.y)) + y * d_grid.pitch))[x])
 
+// Clear count of particles in grid.
 __global__ void resetGrid(cudaPitchedPtr d_grid, int3 grid_size) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -10,6 +11,7 @@ __global__ void resetGrid(cudaPitchedPtr d_grid, int3 grid_size) {
     getGridCell(x,y,z).charge = 0;
 }
 
+// Count particles in each grid cell.
 __global__ void particlesToGrid(cudaPitchedPtr d_grid, Electron* d_electrons, int* n, int3 grid_size) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= *n) return;
@@ -23,12 +25,12 @@ __global__ void particlesToGrid(cudaPitchedPtr d_grid, Electron* d_electrons, in
     atomicAdd(&getGridCell(x,y,z).charge, 1);
 }
 
+// Calculate acceleration for cell in grid according to charge in neighbouring cells.
 __global__ void updateGrid(cudaPitchedPtr d_grid, double electric_force_constant, int3 grid_size) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     int z = blockIdx.z * blockDim.z + threadIdx.z;
 
-    // INSERT ELEMENT TO 3D ARRAY
     char* gridPtr = (char*)d_grid.ptr;
     size_t pitch = d_grid.pitch; // the number of bytes in a row of the array
     size_t slicePitch = pitch * grid_size.y; // the number of bytes pr slice
@@ -53,6 +55,7 @@ __global__ void updateGrid(cudaPitchedPtr d_grid, double electric_force_constant
     ((Cell*)row)[x].acceleration = make_float3(xAcc, yAcc, zAcc);
 }
 
+// Gives each particle its acceleration according to its grid cell.
 __global__ void gridToParticles(cudaPitchedPtr d_grid, Electron* d_electrons, int* n, int3 grid_size) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= *n) return;
